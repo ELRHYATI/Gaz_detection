@@ -56,3 +56,45 @@ export interface HistoricalData {
   humidity: ChartDataPoint[];
   temperature: ChartDataPoint[];
 }
+
+// Actuators and sensors from external RTDB structure
+export type OnOff = 'ON' | 'OFF';
+export type FenetreState = 'FERME' | 'OUVERT';
+
+export interface ActuatorStates {
+  LED_rouge?: OnOff;
+  LED_verte?: OnOff;
+  buzzer?: OnOff;
+  fenetres?: FenetreState;
+}
+
+export interface AlertRecord {
+  id: string;
+  [key: string]: unknown;
+}
+
+export interface SensorReadings {
+  MQ2?: number | null;
+  timestamp?: number | null;
+}
+
+export interface SystemData {
+  actuators: ActuatorStates;
+  alerts: AlertRecord[];
+  sensors: SensorReadings;
+}
+
+// Motor control types for string-based status and logging
+export type MotorStatus = 'open' | 'closed';
+
+export interface MotorLog {
+  id?: string;
+  timestamp: number;
+  event: 'command' | 'state' | 'error';
+  from?: MotorStatus;
+  to?: MotorStatus;
+  message?: string;
+  actor?: string;
+  success?: boolean;
+  error?: string;
+}

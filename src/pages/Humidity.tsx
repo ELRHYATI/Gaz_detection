@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FiDroplet } from 'react-icons/fi';
-import { subscribeToLatestReading } from '../utils/firebase';
+import { subscribeToLatestReadingCompat as subscribeToLatestReading } from '../utils/firebase';
 import type { GasReading } from '../types';
 
 const Humidity: React.FC = () => {

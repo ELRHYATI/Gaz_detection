@@ -1,0 +1,161 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    "LED_rouge": {
+      ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.device == true)",
+      ".validate": "newData.isString() && (newData.val() == 'ON' || newData.val() == 'OFF')"
+    },
+    "LED_verte": {
+      ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.device == true)",
+      ".validate": "newData.isString() && (newData.val() == 'ON' || newData.val() == 'OFF')"
+    },
+    "buzzer": {
+      ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.device == true)",
+      ".validate": "newData.isString() && (newData.val() == 'ON' || newData.val() == 'OFF')"
+    },
+    "fenetres": {
+      ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.device == true)",
+      ".validate": "newData.isString() && (newData.val() == 'FERME' || newData.val() == 'OUVERT')"
+    },
+    "actuators_logs": {
+      "$logid": {
+        ".write": "auth != null",
+        ".validate": "newData.child('timestamp').isNumber() && newData.child('changes').isString()"
+      }
+    },
+    "motor": {
+      "status": {
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+        ".validate": "newData.isString() && (newData.val() == 'open' || newData.val() == 'closed')"
+      },
+      "state": {
+        ".write": "auth != null && (auth.token.device == true || auth.token.role == 'admin')",
+        ".validate": "newData.isString() && (newData.val() == 'open' || newData.val() == 'closed')"
+      },
+      "logs": {
+        "$logid": {
+          ".write": "auth != null",
+          ".validate": "newData.child('timestamp').isNumber() && newData.child('event').isString()"
+        }
+      }
+    },
+    "alertes": {
+      ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+      ".validate": "newData.hasOnly(['OcRfhriO1eH19IBo5lM','OcRhG9I-a0XTq87JZCH','OcRj7WStg5MODXnhmOe','OcRjLQ6MoBDho76dg8z','OcRjMzsxjnUId4Yggbk','OcRs8IhKMHRelyXmVSQ','OcaVDEFF1x7d5OVD4xq','OcaVzsglR5v0aOPVP5z','OcaW9GmJD6RzVYwMwAJ'])"
+    },
+    "capteurs": {
+      ".write": "auth != null && (auth.token.device == true || auth.token.role == 'admin')",
+      ".validate": "newData.child('MQ2').isNumber() && newData.child('timestamp').isNumber()"
+    },
+    "latestReading": {
+      ".write": "auth != null && (auth.token.device == true || auth.token.role == 'admin')",
+      ".validate": "newData.hasChildren(['gasLevel','humidity','temperature','timestamp']) && newData.child('gasLevel').isNumber() && newData.child('humidity').isNumber() && newData.child('temperature').isNumber() && newData.child('timestamp').isNumber()"
+    },
+    "gasReadings": {
+      "$rid": {
+        ".write": "auth != null && (auth.token.device == true || auth.token.role == 'admin')",
+        ".validate": "newData.child('gasLevel').isNumber() && newData.child('timestamp').isNumber()"
+      }
+    }
+    ,
+    "actionneurs": {
+      "fenetres": {
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.device == true)",
+        ".validate": "newData.isString() && (newData.val() == 'FERME' || newData.val() == 'OUVERT')"
+      }
+    },
+    "alerts_active": {
+      "$fp": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+        ".validate": "newData.child('severity').isString() && newData.child('parameter').isString() && newData.child('started_at').isNumber() && newData.child('expires_at').isNumber() && newData.child('last_updated').isNumber()"
+      }
+    },
+    "alerts_logs": {
+      "$logid": {
+        ".write": "auth != null",
+        ".validate": "newData.child('timestamp').isNumber() && newData.child('severity').isString() && newData.child('parameter').isString() && newData.child('message').isString() && newData.child('acknowledged').isBoolean()"
+      }
+    },
+    "alerts_notifications_logs": {
+      "$id": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.child('timestamp').isNumber() && newData.child('channel').isString() && newData.child('status').isString()"
+      }
+    },
+    "alerts_delivery": {
+      "$id": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.child('status').isString() && newData.child('attempts').isNumber() && newData.child('provider').isString()"
+      }
+    },
+    "commandes": {
+      "servo_manuel": {
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.device == true)",
+        ".validate": "newData.isString() || newData.isBoolean() || newData.isNumber()"
+      },
+      "servo_manuel_ack": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.device == true)",
+        ".validate": "newData.child('timestamp').isNumber() && newData.child('applied').isString()"
+      }
+    },
+    "window_control": {
+      ".read": "auth != null",
+      "current_state": {
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator') && root.child('window_control/manual_override').val() == true",
+        ".validate": "newData.isString() && (newData.val() == 'open' || newData.val() == 'closed')"
+      },
+      "servo_position": {
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator') && root.child('window_control/manual_override').val() == true",
+        ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 90)"
+      },
+      "last_updated": {
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator' || auth.token.device == true)",
+        ".validate": "newData.isNumber() && newData.val() > 0"
+      },
+      "manual_override": {
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+        ".validate": "newData.isBoolean()"
+      }
+    },
+    "user_settings": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "whatsapp_phone": {
+          ".validate": "newData.isString() && newData.val().matches(/^\\+[1-9]\\d{6,14}$/)"
+        }
+      }
+    }
+    ,
+    "message_templates": {
+      ".read": "auth != null",
+      "$severity": {
+        ".write": "auth != null && auth.token.role == 'admin'",
+        "active_version": { ".validate": "newData.isString()" },
+        "versions": {
+          "$vid": {
+            ".validate": "newData.child('template').isString() && (!newData.child('actions').exists() || newData.child('actions').isList())"
+          }
+        }
+      }
+    }
+    ,
+    "notification_settings": {
+      ".read": "auth != null",
+      ".write": "auth != null && auth.token.role == 'admin'",
+      "provider": { ".validate": "newData.isString() && (newData.val() == 'callmebot' || newData.val() == 'telegram' || newData.val() == 'none')" },
+      "callmebot": {
+        "phone": { ".validate": "newData.isString() && newData.val().matches(/^\\+[1-9]\\d{6,14}$/)" },
+        "apikey": { ".validate": "newData.isString()" }
+      },
+      "telegram": {
+        "token": { ".validate": "newData.isString()" },
+        "chat_id": { ".validate": "newData.isString()" }
+      }
+    }
+  }
+}

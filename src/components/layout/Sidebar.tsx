@@ -5,11 +5,9 @@ import {
   FiSettings, 
   FiToggleLeft, 
   FiX,
-  FiActivity,
-  FiThermometer,
-  FiDroplet,
   FiBarChart2,
-  FiWind
+  FiWind,
+  FiDatabase
 } from 'react-icons/fi'
 import { useI18n } from '../../contexts/I18nContext'
 
@@ -20,12 +18,11 @@ interface SidebarProps {
 
 const navigation = [
   { key: 'nav.dashboard', fallback: 'Dashboard', href: '/dashboard', icon: FiHome },
-  { key: 'nav.gasLevels', fallback: 'Gas Levels', href: '/gas-levels', icon: FiActivity },
-  { key: 'nav.temperature', fallback: 'Temperature', href: '/temperature', icon: FiThermometer },
-  { key: 'nav.humidity', fallback: 'Humidity', href: '/humidity', icon: FiDroplet },
   { key: 'nav.history', fallback: 'History', href: '/history', icon: FiBarChart2 },
   { key: 'nav.motorControl', fallback: 'Motor Control', href: '/motor-control', icon: FiToggleLeft },
   { key: 'nav.thresholds', fallback: 'Thresholds', href: '/thresholds', icon: FiSettings },
+  { key: 'nav.systemData', fallback: 'System Data', href: '/system-data', icon: FiDatabase },
+  { key: 'nav.settings', fallback: 'Settings', href: '/settings', icon: FiSettings },
 ]
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {

@@ -12,8 +12,12 @@ const Settings: React.FC = () => {
   const [notifyCritical, setNotifyCritical] = useState<boolean>(localStorage.getItem('notifyCritical') !== 'false');
   const [notifyDanger, setNotifyDanger] = useState<boolean>(localStorage.getItem('notifyDanger') !== 'false');
   const [notifyWarning, setNotifyWarning] = useState<boolean>(localStorage.getItem('notifyWarning') === 'true');
+  const [paletteCritical, setPaletteCritical] = useState<string>(localStorage.getItem('palette.critical') ?? 'red');
+  const [paletteDanger, setPaletteDanger] = useState<string>(localStorage.getItem('palette.danger') ?? 'orange');
+  const [paletteWarning, setPaletteWarning] = useState<string>(localStorage.getItem('palette.warning') ?? 'amber');
   const { t, locale, setLocale } = useI18n();
   const [language, setLanguage] = useState<string>(locale);
+  // SMS section removed
 
   useEffect(() => {
     const root = document.documentElement;
@@ -44,9 +48,19 @@ const Settings: React.FC = () => {
     localStorage.setItem('notifyWarning', warn ? 'true' : 'false');
   };
 
+  // SMS section removed
+
+  // SMS actions removed
+
   const handleLanguageChange = (lang: string) => {
     setLanguage(lang);
     localStorage.setItem('language', lang);
+  };
+
+  const savePalette = (crit: string, danger: string, warn: string) => {
+    localStorage.setItem('palette.critical', crit);
+    localStorage.setItem('palette.danger', danger);
+    localStorage.setItem('palette.warning', warn);
   };
 
   return (
@@ -57,6 +71,8 @@ const Settings: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400">{t('settings.subtitle', 'Manage your account preferences')}</p>
         </div>
       </div>
+
+      {/* SMS Notifications section removed */}
 
       {/* Appearance */}
       <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
@@ -133,6 +149,57 @@ const Settings: React.FC = () => {
               <span>{t('settings.notify.warning', 'Warning')}</span>
             </span>
           </label>
+        </div>
+      </div>
+
+      {/* Emergency Contact (WhatsApp) removed */}
+
+      {/* Emergency Message Templates removed */}
+
+      {/* Severity Colors */}
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center space-x-2">
+          <FiAlertOctagon className="h-5 w-5" />
+          <span>{t('settings.severityColors', 'Severity Colors')}</span>
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{t('settings.severityColorsDesc', 'Customize the color palette used for alert severities.')}</p>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Critical</label>
+            <select
+              value={paletteCritical}
+              onChange={(e) => { const v = e.target.value; setPaletteCritical(v); savePalette(v, paletteDanger, paletteWarning); }}
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            >
+              <option value="red">Red</option>
+              <option value="orange">Orange</option>
+              <option value="amber">Amber</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Danger</label>
+            <select
+              value={paletteDanger}
+              onChange={(e) => { const v = e.target.value; setPaletteDanger(v); savePalette(paletteCritical, v, paletteWarning); }}
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            >
+              <option value="red">Red</option>
+              <option value="orange">Orange</option>
+              <option value="amber">Amber</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Warning</label>
+            <select
+              value={paletteWarning}
+              onChange={(e) => { const v = e.target.value; setPaletteWarning(v); savePalette(paletteCritical, paletteDanger, v); }}
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            >
+              <option value="red">Red</option>
+              <option value="orange">Orange</option>
+              <option value="amber">Amber</option>
+            </select>
+          </div>
         </div>
       </div>
 

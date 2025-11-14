@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getFunctions } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 
@@ -23,5 +24,8 @@ export const auth = getAuth(app);
 
 // Initialize Realtime Database and get a reference to the service
 export const database = getDatabase(app);
+
+// Initialize Cloud Functions (callable) client
+export const functionsClient = getFunctions(app, 'europe-west1');
 
 export default app;

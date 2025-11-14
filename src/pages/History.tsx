@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import { getHistoricalReadings } from '../utils/firebase';
+import { getHistoricalReadings, subscribeToLatestReadingCompat as subscribeToLatestReading } from '../utils/firebase';
 import type { GasReading } from '../types';
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Tooltip, Legend);
@@ -17,17 +17,34 @@ ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Tooltip,
 const History: React.FC = () => {
   const [readings, setReadings] = useState<GasReading[]>([]);
   const [limit, setLimit] = useState<number>(100);
+  const [isLiveBuffer, setIsLiveBuffer] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setIsLiveBuffer(false);
+    let liveUnsub: (() => void) | null = null;
     (async () => {
       try {
         const data = await getHistoricalReadings(limit);
-        // Data is sorted desc in util; reverse for chronological chart left->right
-        setReadings(data.reverse());
+        const chronological = data.reverse();
+        if (chronological.length > 0) {
+          setReadings(chronological);
+        } else {
+          // Fallback: build a live buffer from realtime stream when DB history is empty
+          setReadings([]);
+          setIsLiveBuffer(true);
+          liveUnsub = subscribeToLatestReading((reading) => {
+            if (!reading) return;
+            setReadings((prev) => {
+              const next = [...prev, reading];
+              // keep within limit, chronological left->right
+              return next.slice(Math.max(0, next.length - limit));
+            });
+          });
+        }
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Erreur lors du chargement des historiques';
         setError(message);
@@ -35,9 +52,12 @@ const History: React.FC = () => {
         setLoading(false);
       }
     })();
+    return () => { if (liveUnsub) liveUnsub(); };
   }, [limit]);
 
-  const labels = readings.map(r => new Date(r.timestamp).toLocaleString('fr-FR'));
+  // Handle timestamps in seconds or milliseconds
+  const toMillis = (ts: number) => (ts < 1e12 ? ts * 1000 : ts);
+  const labels = readings.map(r => new Date(toMillis(r.timestamp)).toLocaleString('fr-FR'));
 
   const data = {
     labels,
@@ -122,6 +142,11 @@ const History: React.FC = () => {
             <option value={100}>100</option>
             <option value={200}>200</option>
           </select>
+          {isLiveBuffer && (
+            <span className="ml-2 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+              Live buffer
+            </span>
+          )}
         </div>
       </div>
 

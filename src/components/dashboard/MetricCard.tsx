@@ -3,6 +3,7 @@ import type { IconType } from 'react-icons';
 import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
 import type { AlertLevel } from '../../types';
 import { getAlertBadgeClasses } from '../../utils/alerts';
+import Sparkline from '../common/Sparkline';
 
 interface MetricCardProps {
   title: string;
@@ -12,6 +13,7 @@ interface MetricCardProps {
   trend?: 'up' | 'down';
   alertLevel: AlertLevel;
   className?: string;
+  history?: number[];
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -21,7 +23,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   icon: Icon,
   trend,
   alertLevel,
-  className = ''
+  className = '',
+  history = []
 }) => {
   const badgeClasses = getAlertBadgeClasses(alertLevel.level);
   const progressColor =
@@ -45,6 +48,13 @@ const MetricCard: React.FC<MetricCardProps> = ({
           </div>
         )}
       </div>
+
+      {/* Sparkline */}
+      {history && history.length > 1 && (
+        <div className="mb-3 text-gray-400 dark:text-gray-500">
+          <Sparkline values={history} className="w-full" />
+        </div>
+      )}
 
       <div className="flex items-baseline space-x-2">
         <div className="text-3xl font-bold text-gray-900 dark:text-gray-100">{value.toFixed(1)}</div>

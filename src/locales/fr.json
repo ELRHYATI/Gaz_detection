@@ -81,6 +81,7 @@
   "nav.history": "Historique",
   "nav.motorControl": "Contrôle du moteur",
   "nav.thresholds": "Seuils",
+  "nav.settings": "Paramètres",
 
   "status.systemActive": "Système actif",
   "status.monitoring": "Surveillance",

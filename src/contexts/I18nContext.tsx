@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
+import { usePersistentState } from '../hooks/usePersistentState';
 
 export type Locale = 'en' | 'fr';
 
@@ -18,15 +19,22 @@ interface I18nProviderProps {
 }
 
 export const I18nProvider: React.FC<I18nProviderProps> = ({ children, messages }) => {
-  const [locale, setLocaleState] = useState<Locale>(() => {
-    const stored = localStorage.getItem('locale');
-    if (stored === 'fr' || stored === 'en') return stored;
-    return 'en';
+  const [locale, setLocaleState] = usePersistentState<Locale>('locale', 'en', {
+    storage: 'local',
+    namespace: 'app:',
+    validate: (x: any): x is Locale => x === 'en' || x === 'fr',
+    deserialize: (raw) => {
+      if (!raw) return null;
+      // Accept raw strings as we previously stored plain values
+      if (raw === 'en' || raw === 'fr') return raw as Locale;
+      try {
+        const parsed = JSON.parse(raw);
+        return (parsed === 'en' || parsed === 'fr') ? (parsed as Locale) : null;
+      } catch {
+        return null;
+      }
+    },
   });
-
-  useEffect(() => {
-    localStorage.setItem('locale', locale);
-  }, [locale]);
 
   const setLocale = (next: Locale) => setLocaleState(next);
 

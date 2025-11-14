@@ -12,15 +12,8 @@ export const calculateAlertLevel = (
     };
   }
 
-  const { gasLevel, humidity, temperature } = reading;
-  const {
-    gasMin,
-    gasMax,
-    humidityMin,
-    humidityMax,
-    temperatureMin,
-    temperatureMax
-  } = threshold;
+  const { gasLevel } = reading;
+  const { gasMin, gasMax } = threshold;
 
   // Check for critical gas levels (immediate danger)
   if (gasLevel > gasMax * 1.5) {
@@ -32,26 +25,10 @@ export const calculateAlertLevel = (
   }
 
   // Check for dangerous conditions
-  if (
-    gasLevel > gasMax ||
-    gasLevel < gasMin ||
-    humidity > humidityMax ||
-    humidity < humidityMin ||
-    temperature > temperatureMax ||
-    temperature < temperatureMin
-  ) {
-    let message = 'ATTENTION: ';
-    const issues = [];
-
-    if (gasLevel > gasMax) issues.push('Gaz élevé');
-    if (gasLevel < gasMin) issues.push('Gaz faible');
-    if (humidity > humidityMax) issues.push('Humidité élevée');
-    if (humidity < humidityMin) issues.push('Humidité faible');
-    if (temperature > temperatureMax) issues.push('Température élevée');
-    if (temperature < temperatureMin) issues.push('Température faible');
-
-    message += issues.join(', ');
-
+  // Evaluate overall dashboard alert based on GAS ONLY
+  // This avoids false warnings when other sensors are unavailable or zeroed.
+  if (gasLevel > gasMax || gasLevel < gasMin) {
+    const message = gasLevel > gasMax ? 'ATTENTION: Gaz élevé' : 'ATTENTION: Gaz faible';
     return {
       level: 'danger',
       message,
@@ -61,20 +38,11 @@ export const calculateAlertLevel = (
 
   // Check for warning conditions (approaching limits)
   const gasWarningRange = (gasMax - gasMin) * 0.1;
-  const humidityWarningRange = (humidityMax - humidityMin) * 0.1;
-  const temperatureWarningRange = (temperatureMax - temperatureMin) * 0.1;
 
-  if (
-    gasLevel > gasMax - gasWarningRange ||
-    gasLevel < gasMin + gasWarningRange ||
-    humidity > humidityMax - humidityWarningRange ||
-    humidity < humidityMin + humidityWarningRange ||
-    temperature > temperatureMax - temperatureWarningRange ||
-    temperature < temperatureMin + temperatureWarningRange
-  ) {
+  if (gasLevel > gasMax - gasWarningRange || gasLevel < gasMin + gasWarningRange) {
     return {
       level: 'warning',
-      message: 'Attention: Valeurs approchant les limites',
+      message: 'Attention: Gaz proche des limites',
       color: 'text-warning-600'
     };
   }

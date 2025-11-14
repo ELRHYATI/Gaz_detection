@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FiThermometer } from 'react-icons/fi';
-import { subscribeToLatestReading } from '../utils/firebase';
+import { subscribeToLatestReadingCompat as subscribeToLatestReading } from '../utils/firebase';
 import type { GasReading } from '../types';
 
 const Temperature: React.FC = () => {

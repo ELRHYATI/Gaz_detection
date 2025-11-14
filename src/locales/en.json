@@ -81,6 +81,7 @@
   "nav.history": "History",
   "nav.motorControl": "Motor Control",
   "nav.thresholds": "Thresholds",
+  "nav.settings": "Settings",
 
   "status.systemActive": "System Active",
   "status.monitoring": "Monitoring",

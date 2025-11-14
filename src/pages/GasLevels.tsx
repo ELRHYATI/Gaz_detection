@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend
 } from 'chart.js';
-import { subscribeToLatestReading } from '../utils/firebase';
+import { subscribeToLatestReadingCompat as subscribeToLatestReading } from '../utils/firebase';
 import type { GasReading } from '../types';
 
 ChartJS.register(LineElement, CategoryScale, LinearScale, PointElement, Tooltip, Legend);

@@ -1,8 +1,12 @@
+/* Design System components must be imported first */
+@import './styles/design-system.css';
+
 @config "../tailwind.config.js";
 @reference "tailwindcss";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 
 /* Hide scrollbars utility for scoped use */
 .no-scrollbar {
