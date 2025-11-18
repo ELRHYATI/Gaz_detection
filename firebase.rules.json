@@ -144,6 +144,32 @@
       }
     }
     ,
+    "user_metadata": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "last_login": { ".validate": "newData.isNumber() && newData.val() > 0" },
+        "email": { ".validate": "newData.isString()" },
+        "displayName": { ".validate": "newData.isString()" }
+      }
+    }
+    ,
+    "thresholds": {
+      "current": {
+        ".read": "auth != null",
+        ".write": "auth != null && (auth.token.role == 'admin' || auth.token.role == 'operator')",
+        ".validate": "newData.child('gasMin').isNumber() && newData.child('gasMax').isNumber() && newData.child('humidityMin').isNumber() && newData.child('humidityMax').isNumber() && newData.child('temperatureMin').isNumber() && newData.child('temperatureMax').isNumber() && newData.child('updatedAt').isNumber() && newData.child('updatedBy').isString()"
+      }
+    }
+    ,
+    "controle_manuel": {
+      "seuil_gaz": {
+        ".read": "auth != null",
+        ".write": "auth != null",
+        ".validate": "newData.isNumber() && newData.val() >= 100 && newData.val() <= 1023"
+      }
+    }
+    ,
     "notification_settings": {
       ".read": "auth != null",
       ".write": "auth != null && auth.token.role == 'admin'",
@@ -155,6 +181,43 @@
       "telegram": {
         "token": { ".validate": "newData.isString()" },
         "chat_id": { ".validate": "newData.isString()" }
+      },
+      "providers": {
+        "telegram": {
+          ".validate": "newData.child('enabled').isBoolean() && newData.child('last_updated').isNumber() && newData.child('chat_id').isString() && (newData.child('bot_token').isString() || (newData.child('bot_token_cipher').child('iv').isString() && newData.child('bot_token_cipher').child('ct').isString() && newData.child('bot_token_cipher').child('tag').isString()))"
+        },
+        "callmebot": {
+          ".validate": "newData.child('enabled').isBoolean() && newData.child('last_updated').isNumber() && newData.child('phone').isString() && (newData.child('apikey').isString() || (newData.child('apikey_cipher').child('iv').isString() && newData.child('apikey_cipher').child('ct').isString() && newData.child('apikey_cipher').child('tag').isString()))"
+        }
+      }
+    },
+    "telegram": {
+      ".read": "auth != null && auth.token.role == 'admin'",
+      ".write": "auth != null && auth.token.role == 'admin'",
+      "users": { "$tid": { ".validate": "newData.child('uid').isString()" } },
+      "webhook_events": { "$update": { ".validate": "newData.child('timestamp').isNumber() && newData.child('update').isMap()" } },
+      "chats": { "$chat": { ".validate": "newData.child('last_message_at').isNumber()" } }
+    }
+    ,
+    "system": {
+      ".read": "auth != null",
+      "status": {
+        ".write": "auth != null",
+        ".validate": "newData.isString() && (newData.val() == 'active' || newData.val() == 'inactive')"
+      },
+      "last_status_change": {
+        ".write": "auth != null",
+        ".validate": "newData.isNumber() && newData.val() > 0"
+      },
+      "manual_override": {
+        ".write": "auth != null",
+        ".validate": "newData.isBoolean()"
+      },
+      "logs": {
+        "$logid": {
+          ".write": "auth != null",
+          ".validate": "newData.child('timestamp').isNumber() && newData.child('event').isString() && newData.child('status').isString()"
+        }
       }
     }
   }

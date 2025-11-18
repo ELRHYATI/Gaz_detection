@@ -1,47 +1,53 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { FiMail, FiLock, FiAlertCircle } from 'react-icons/fi';
+import { FiMail, FiLock, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import { useAuth } from '../../contexts/AuthContext';
-import { useI18n } from '../../contexts/I18nContext';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface LoginFormData {
   email: string;
   password: string;
+  remember: boolean;
 }
 
 const Login: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
+  const [isAnimating, setIsAnimating] = useState(false);
   const [error, setError] = useState('');
-  const [rememberMe, setRememberMe] = useState<boolean>(localStorage.getItem('rememberMe') === 'true');
-  const storedEmail = localStorage.getItem('rememberedEmail') || '';
-  
-  const { login } = useAuth();
-  const { t } = useI18n();
+  const { login, currentUser, logout } = useAuth();
   const navigate = useNavigate();
-  
+  const location = useLocation() as { state?: { from?: { pathname?: string } } };
+
+  const prefersReduced = useMemo(() => {
+    try {
+      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    } catch {
+      return false;
+    }
+  }, []);
+
   const {
     register,
     handleSubmit,
     formState: { errors }
-  } = useForm<LoginFormData>({ defaultValues: { email: storedEmail } });
+  } = useForm<LoginFormData>({ defaultValues: { remember: true } });
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     setError('');
-    
     try {
-      await login(data.email, data.password);
-      if (rememberMe) {
-        localStorage.setItem('rememberedEmail', data.email);
-        localStorage.setItem('rememberMe', 'true');
+      await login(data.email, data.password, data.remember);
+      const target = location.state?.from?.pathname || '/dashboard';
+      // Play success transition before redirect
+      const durationMs = prefersReduced ? 0 : 1000; // 800–1200ms range
+      setIsAnimating(true);
+      if (durationMs <= 0) {
+        navigate(target, { replace: true });
       } else {
-        localStorage.removeItem('rememberedEmail');
-        localStorage.setItem('rememberMe', 'false');
+        window.setTimeout(() => navigate(target, { replace: true }), durationMs);
       }
-      navigate('/dashboard');
     } catch (err: unknown) {
-      const message = (err as { message?: string })?.message ?? t('auth.login.error', 'An error occurred');
+      const message = (err as { message?: string })?.message ?? 'Invalid credentials';
       setError(message);
     } finally {
       setIsLoading(false);
@@ -51,13 +57,15 @@ const Login: React.FC = () => {
   return (
     <div className="fixed inset-0 overflow-hidden no-scrollbar flex items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-900 px-4">
       <div className="max-w-lg w-full">
-        <div className="rounded-3xl shadow-2xl p-6 sm:p-10 space-y-6 sm:space-y-8 bg-white/10 border border-white/15 backdrop-blur-xl max-h-[calc(100vh-2rem)] overflow-hidden">
+        <div className={`rounded-3xl shadow-2xl p-6 sm:p-10 space-y-6 sm:space-y-8 bg-white/10 border border-white/15 backdrop-blur-xl max-h-[calc(100vh-2rem)] overflow-hidden transition-all ${isAnimating ? 'opacity-0 translate-y-2 scale-95 duration-500' : 'opacity-100 duration-300'}`}
+             aria-busy={isLoading}
+        >
           <div className="text-center">
             <div className="mx-auto h-16 w-16 rounded-2xl flex items-center justify-center mb-6 bg-gradient-to-br from-orange-500 to-pink-500 shadow-lg">
-              <img src="/gas.svg" alt="Gaz" className="h-8 w-8" />
+              <img src="/gas.svg" alt="Logo" className="h-8 w-8" />
             </div>
-            <h2 className="text-4xl font-extrabold text-white">{t('app.title', 'Gas Detection')}</h2>
-            <p className="mt-2 text-base text-indigo-200">{t('app.subtitle', 'Smart safety system')}</p>
+            <h2 className="text-4xl font-extrabold text-white">Sign in</h2>
+            <p className="mt-2 text-base text-indigo-200">Use your email and password</p>
           </div>
 
           <form className="mt-4 space-y-6 flex flex-col items-center" onSubmit={handleSubmit(onSubmit)}>
@@ -71,7 +79,7 @@ const Login: React.FC = () => {
             <div className="space-y-4 flex flex-col items-center">
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-indigo-200 mb-2 text-center">
-                  {t('auth.login.email', 'Email address')}
+                  Email
                 </label>
                 <div className="relative w-64 sm:w-72 mx-auto">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -79,25 +87,25 @@ const Login: React.FC = () => {
                   </div>
                    <input
                      {...register('email', {
-                       required: t('validation.emailRequired', 'Email address is required'),
+                       required: 'Email is required',
                        pattern: {
-                         value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                         message: t('validation.emailInvalid', 'Invalid email address')
-                       }
+                         value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                         message: 'Enter a valid email address',
+                       },
                      })}
                      type="email"
                      className={`input-field w-full pl-8 pr-3 py-2 text-sm bg-white/10 border-white/20 placeholder:text-indigo-200 text-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent rounded-xl ${errors.email ? 'border-danger-300 focus:ring-danger-500' : ''}`}
-                     placeholder={t('common.emailPlaceholder', 'you@example.com')}
+                     placeholder="you@example.com"
                    />
                 </div>
                 {errors.email && (
-                  <p className="mt-1 text-sm text-red-300 text-center">{errors.email.message}</p>
+                  <p className="mt-1 text-sm text-red-300 text-center">{String(errors.email.message)}</p>
                 )}
               </div>
 
               <div>
                 <label htmlFor="password" className="block text-sm font-medium text-indigo-200 mb-2 text-center">
-                  {t('auth.login.password', 'Password')}
+                  Password
                 </label>
                 <div className="relative w-64 sm:w-72 mx-auto">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -105,11 +113,8 @@ const Login: React.FC = () => {
                   </div>
                    <input
                      {...register('password', {
-                       required: t('validation.passwordRequired', 'Password is required'),
-                       minLength: {
-                         value: 6,
-                         message: t('validation.passwordMin', 'Password must be at least 6 characters')
-                       }
+                       required: 'Password is required',
+                       minLength: { value: 6, message: 'Use at least 6 characters' },
                      })}
                      type="password"
                      className={`input-field w-full pl-8 pr-3 py-2 text-sm bg-white/10 border-white/20 placeholder:text-indigo-200 text-white focus:ring-2 focus:ring-indigo-400 focus:border-transparent rounded-xl ${errors.password ? 'border-danger-300 focus:ring-danger-500' : ''}`}
@@ -117,27 +122,18 @@ const Login: React.FC = () => {
                    />
                 </div>
                 {errors.password && (
-                  <p className="mt-1 text-sm text-red-300 text-center">{errors.password.message}</p>
+                  <p className="mt-1 text-sm text-red-300 text-center">{String(errors.password.message)}</p>
                 )}
               </div>
-            </div>
 
-            <div className="flex flex-col items-center gap-3 w-64 sm:w-72 mx-auto">
-              <label className="flex items-center space-x-2 select-none">
+              <label className="inline-flex items-center space-x-2 text-indigo-200">
                 <input
                   type="checkbox"
-                  className="rounded border-white/30 bg-white/10 text-indigo-400 focus:ring-indigo-400"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="rounded border-white/30 bg-white/10 text-indigo-500 focus:ring-indigo-400"
+                  {...register('remember')}
                 />
-                <span className="text-sm text-indigo-200">{t('auth.login.remember', 'Remember me')}</span>
+                <span className="text-sm">Remember me</span>
               </label>
-              <Link
-                to="/forgot-password"
-                className="text-sm text-indigo-300 hover:text-indigo-200 font-medium"
-              >
-                {t('auth.login.forgot', 'Forgot password?')}
-              </Link>
             </div>
 
             <button
@@ -151,25 +147,36 @@ const Login: React.FC = () => {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <span>{t('auth.login.signing', 'Signing in...')}</span>
+                  <span>Signing in...</span>
                 </>
               ) : (
-                <span>{t('auth.login.submit', 'Sign in')}</span>
+                <span>Sign in</span>
               )}
             </button>
 
-            <div className="text-center">
-              <span className="text-sm text-gray-600 dark:text-gray-300">
-                {t('common.alreadyHave', 'Already have an account?')}{' '}
-                <Link
-                  to="/register"
-                  className="font-medium text-primary-600 hover:text-primary-500"
-                >
-                  {t('common.createAccountLink', 'Create an account')}
-                </Link>
-              </span>
-            </div>
+            {currentUser ? (
+              <div className="w-64 sm:w-72 mx-auto bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 rounded-lg p-4 flex items-center justify-center space-x-2" role="status">
+                <FiCheckCircle className="text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <span className="text-emerald-700 dark:text-emerald-100 text-sm">Logged in as {currentUser.email || currentUser.displayName || 'User'}</span>
+                <button onClick={() => logout()} className="ml-4 text-xs text-indigo-700 dark:text-indigo-300 underline">Logout</button>
+              </div>
+            ) : null}
           </form>
+        </div>
+      </div>
+      {/* Success transition overlay */}
+      <div
+        className={`fixed inset-0 z-40 flex items-center justify-center pointer-events-none transition-opacity ${prefersReduced ? 'duration-0' : 'duration-1000'} ${isAnimating ? 'opacity-100' : 'opacity-0'}`}
+        aria-hidden="true"
+      >
+        <div className="absolute inset-0 bg-black/40" />
+        <div className={`relative flex flex-col items-center justify-center ${prefersReduced ? '' : 'animate-none'}`}>
+          <div className={`h-20 w-20 rounded-full bg-emerald-600/90 flex items-center justify-center shadow-lg transition-transform ${isAnimating ? 'scale-100' : 'scale-75'} ${prefersReduced ? 'duration-0' : 'duration-700'}`}>
+            <svg viewBox="0 0 24 24" className="h-10 w-10 text-white">
+              <path d="M20 6L9 17l-5-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div className="mt-4 text-white text-sm">Welcome back</div>
         </div>
       </div>
     </div>

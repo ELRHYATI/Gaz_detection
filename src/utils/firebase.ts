@@ -1,8 +1,10 @@
 import { ref, set, get, onValue, off, push, remove } from 'firebase/database';
 import { httpsCallable } from 'firebase/functions';
-import { database, functionsClient } from '../config/firebase';
+import { getToken } from 'firebase/messaging';
+import { auth, functionsClient, database, getMessagingIfSupported } from '../config/firebase';
 import { buildEmergencyMessage } from './emergency';
 import type { GasReading, Threshold, ServoMotorState, ActuatorStates, AlertRecord, SensorReadings, SystemData, OnOff, FenetreState, MotorStatus, MotorLog } from '../types';
+import type { UserNotificationPreferences } from '../types';
 
 // Gas readings operations
 export const saveGasReading = async (reading: Omit<GasReading, 'id'>) => {
@@ -19,6 +21,83 @@ export const saveGasReading = async (reading: Omit<GasReading, 'id'>) => {
     throw error;
   }
 };
+
+// =========================
+// System status & inactivity
+// =========================
+export type SystemStatus = 'active' | 'inactive';
+
+export const setSystemStatus = async (status: SystemStatus, actor?: string) => {
+  try {
+    await set(ref(database, 'system/status'), status);
+    await set(ref(database, 'system/last_status_change'), Date.now());
+    await appendSystemLog({
+      event: status === 'inactive' ? 'auto_inactive' : 'auto_active',
+      status,
+      timestamp: Date.now(),
+      actor: actor || 'service/inactivityMonitor'
+    });
+  } catch (error) {
+    console.error('Error setting system status:', error);
+    throw error;
+  }
+};
+
+export const subscribeToSystemStatus = (
+  callback: (status: SystemStatus) => void,
+  onError?: (error: Error) => void
+) => {
+  const r = ref(database, 'system/status');
+  try {
+    onValue(r, (snap) => {
+      const v = snap.val();
+      callback(v === 'inactive' ? 'inactive' : 'active');
+    });
+  } catch (e) {
+    onError?.(e as Error);
+  }
+  return () => off(r);
+};
+
+export interface SystemLogEntry {
+  id?: string;
+  event: 'auto_inactive' | 'data_active' | 'override_active' | 'auto_active';
+  status: SystemStatus;
+  timestamp: number;
+  actor?: string;
+  details?: Record<string, unknown>;
+}
+
+export const appendSystemLog = async (entry: Omit<SystemLogEntry, 'id'>) => {
+  try {
+    const logsRef = ref(database, 'system/logs');
+    const newRef = push(logsRef);
+    await set(newRef, { ...entry, id: newRef.key });
+  } catch (error) {
+    console.error('Error appending system log', error);
+  }
+};
+
+export const setSystemManualOverride = async (enabled: boolean, actor?: string) => {
+  try {
+    await set(ref(database, 'system/manual_override'), enabled);
+    await appendSystemLog({
+      event: 'override_active',
+      status: 'active',
+      timestamp: Date.now(),
+      actor: actor || 'user/manual',
+      details: { enabled }
+    });
+    if (enabled) {
+      await setSystemStatus('active', actor);
+    }
+  } catch (error) {
+    console.error('Error setting manual override', error);
+    throw error;
+  }
+};
+
+// Removed Neon callable helpers; system runs solely on Realtime Database
 
 export const subscribeToLatestReading = (callback: (reading: GasReading | null) => void) => {
   const latestReadingRef = ref(database, 'latestReading');
@@ -99,6 +178,26 @@ export const getHistoricalReadings = async (limit: number = 100): Promise<GasRea
   }
 };
 
+// User login metadata
+export const saveUserLoginMetadata = async (
+  uid: string,
+  info?: { email?: string; displayName?: string }
+) => {
+  try {
+    const path = `user_metadata/${uid}`;
+    const metaRef = ref(database, path);
+    const payload = {
+      last_login: Date.now(),
+      ...(info?.email ? { email: info.email } : {}),
+      ...(info?.displayName ? { displayName: info.displayName } : {}),
+    };
+    await set(metaRef, payload);
+  } catch (error) {
+    console.error('Error saving user login metadata:', error);
+    // don't throw to avoid breaking login flow
+  }
+};
+
 // Threshold operations
 export const saveThreshold = async (threshold: Omit<Threshold, 'id'>) => {
   try {
@@ -136,6 +235,181 @@ export const subscribeToThreshold = (callback: (threshold: Threshold | null) => 
   });
   
   return () => off(thresholdRef);
+};
+
+// Manual control schema (French keys under control_manuel)
+export interface ManualServoParams {
+  actif?: boolean; // true=manuel, false=automatique
+  position?: number; // degrees 0-180
+  seuil_gaz?: number; // optional gas threshold attached in this node
+}
+
+export interface ManualThresholdParams {
+  seuil_gaz?: number; // 100-1023 (recommended 300-800)
+}
+
+const pathManual = {
+  servoA: 'control_manuel/servo',
+  seuilA: 'control_manuel/seuil',
+  // Compatibility for alternate spelling observed in screenshots
+  servoB: 'controle_manuel/servo',
+  seuilB: 'controle_manuel/seuil',
+};
+
+// Leaf path for manual gas threshold (single numeric value)
+const pathManualLeaf = {
+  seuilGazA: 'control_manuel/seuil_gaz',
+  seuilGazB: 'controle_manuel/seuil_gaz',
+};
+
+export const subscribeToManualServo = (
+  callback: (params: ManualServoParams | null) => void,
+  onError?: (error: Error) => void
+) => {
+  const a = ref(database, pathManual.servoA);
+  const b = ref(database, pathManual.servoB);
+  const handler = (snap: any) => {
+    const val = snap?.val?.();
+    const p = val && typeof val === 'object' ? (val as ManualServoParams) : null;
+    callback(p);
+  };
+  try {
+    onValue(a, handler);
+    onValue(b, handler);
+  } catch (e) {
+    onError?.(e as Error);
+  }
+  return () => { off(a); off(b); };
+};
+
+export const subscribeToManualSeuil = (
+  callback: (params: ManualThresholdParams | null) => void,
+  onError?: (error: Error) => void
+) => {
+  const a = ref(database, pathManual.seuilA);
+  const b = ref(database, pathManual.seuilB);
+  const handler = (snap: any) => {
+    const val = snap?.val?.();
+    const p = val && typeof val === 'object' ? (val as ManualThresholdParams) : null;
+    callback(p);
+  };
+  try {
+    onValue(a, handler);
+    onValue(b, handler);
+  } catch (e) {
+    onError?.(e as Error);
+  }
+  return () => { off(a); off(b); };
+};
+
+// Subscribe to single-value manual gas threshold leaf
+export const subscribeToManualSeuilGaz = (
+  callback: (value: number | null) => void,
+  onError?: (error: Error) => void
+) => {
+  const a = ref(database, pathManualLeaf.seuilGazA);
+  const b = ref(database, pathManualLeaf.seuilGazB);
+  const handler = (snap: any) => {
+    const val = snap?.val?.();
+    const num = typeof val === 'number' ? val : Number.isFinite(Number(val)) ? Number(val) : null;
+    callback(num);
+  };
+  try {
+    onValue(a, handler);
+    onValue(b, handler);
+  } catch (e) {
+    onError?.(e as Error);
+  }
+  return () => { off(a); off(b); };
+};
+
+// Helper: log manual adjustments to actuators_logs (validated by rules)
+export const writeActuatorLog = async (changes: string) => {
+  try {
+    const logRef = push(ref(database, 'actuators_logs'));
+    await set(logRef, { timestamp: Date.now(), changes });
+    return logRef.key;
+  } catch (error) {
+    console.error('Error writing actuator log:', error);
+    // non-blocking
+    return null;
+  }
+};
+
+// Helper: write numeric angle to commandes/servo_manuel
+export const setServoAngle = async (angle: number) => {
+  try {
+    const cmdRef = ref(database, 'commandes/servo_manuel');
+    await set(cmdRef, angle);
+    await writeActuatorLog(`manual.servo.position=${angle}`);
+    await appendMotorLog({ timestamp: Date.now(), event: 'command', to: angle >= 90 ? 'open' : 'closed', message: `manual angle=${angle}`, actor: auth.currentUser?.uid || 'system', success: true });
+  } catch (error) {
+    console.error('Error setting servo angle:', error);
+    throw error;
+  }
+};
+
+// Apply manual seuil -> thresholds/current gasMax
+export const applyManualGasThreshold = async (rawSeuil: unknown) => {
+  const toNumber = (v: unknown) => (typeof v === 'number' ? v : Number(v));
+  const v = toNumber(rawSeuil);
+  if (!Number.isFinite(v)) {
+    await writeActuatorLog('error: manual.seuil_gaz invalid');
+    return { ok: false, error: 'INVALID' } as const;
+  }
+  const min = 100;
+  const max = 1023;
+  const clamped = Math.min(Math.max(v, min), max);
+  try {
+    const current = await getThreshold();
+    const base: Omit<Threshold, 'id'> = current
+      ? {
+          gasMin: current.gasMin,
+          gasMax: clamped,
+          humidityMin: current.humidityMin,
+          humidityMax: current.humidityMax,
+          temperatureMin: current.temperatureMin,
+          temperatureMax: current.temperatureMax,
+          updatedAt: Date.now(),
+          updatedBy: auth.currentUser?.uid || 'system',
+        }
+      : {
+          gasMin: 0,
+          gasMax: clamped,
+          humidityMin: 0,
+          humidityMax: 100,
+          temperatureMin: -20,
+          temperatureMax: 80,
+          updatedAt: Date.now(),
+          updatedBy: auth.currentUser?.uid || 'system',
+        };
+    await saveThreshold(base);
+    await writeActuatorLog(`manual.seuil_gaz=${clamped}`);
+    return { ok: true, value: clamped } as const;
+  } catch (error) {
+    console.error('Error applying manual gas threshold:', error);
+    await writeActuatorLog('error: apply manual seuil_gaz failed');
+    return { ok: false, error: 'WRITE_FAILED' } as const;
+  }
+};
+
+// Set leaf value at controle_manuel/seuil_gaz (and mirror to control_manuel/seuil_gaz)
+export const setManualSeuilGaz = async (value: number | string, actor?: string) => {
+  try {
+    const num = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(num)) throw new Error('invalid value');
+    const MIN = 100, MAX = 1023;
+    const clamped = Math.min(Math.max(num, MIN), MAX);
+    // Primary path requested by user
+    await set(ref(database, pathManualLeaf.seuilGazB), clamped);
+    // Mirror for compatibility
+    await set(ref(database, pathManualLeaf.seuilGazA), clamped);
+    await writeActuatorLog(`manual.seuil_gaz.set=${clamped}${actor ? ` by ${actor}` : ''}`);
+  } catch (error) {
+    console.error('Error setting controle_manuel/seuil_gaz:', error);
+    await writeActuatorLog('error: set controle_manuel/seuil_gaz failed');
+    throw error;
+  }
 };
 
 // Servo motor operations
@@ -273,6 +547,12 @@ export const setUserWhatsAppPhone = async (uid: string, phone: string): Promise<
   }
   const r = ref(database, `user_settings/${uid}/whatsapp_phone`);
   await set(r, phone);
+  try {
+    const callable = httpsCallable(functionsClient, 'neonSetUserWhatsAppPhone');
+    await callable({ phone });
+  } catch (e) {
+    console.warn('Neon dual-write (WhatsApp phone) failed', e);
+  }
 };
 
 // (SMS via Email-to-SMS removed)
@@ -378,6 +658,99 @@ export const getNotificationProvidersSettings = async (): Promise<NotificationPr
 
 export const saveNotificationProvidersSettings = async (settings: NotificationProvidersSettings): Promise<void> => {
   await set(ref(database, 'notification_settings/providers'), settings);
+};
+
+// Cloud functions: secure Telegram provider save and connection test
+export const saveTelegramProviderSettings = async (
+  data: { bot_token: string; chat_id: string; enabled?: boolean }
+): Promise<{ ok: boolean; errorCode?: string; errorMessage?: string }> => {
+  try {
+    const callable = httpsCallable(functionsClient, 'saveTelegramProviderSettings');
+    const res = await callable(data);
+    const d = res.data as any;
+    return { ok: !!d?.ok };
+  } catch (e: any) {
+    const code = e?.code?.replace('functions/', '') || e?.code || 'unknown';
+    const msg = e?.message || 'Failed to save Telegram settings';
+    return { ok: false, errorCode: code, errorMessage: msg };
+  }
+};
+
+export const testTelegramConnection = async (): Promise<{ ok: boolean; sent?: boolean; errorCode?: string; errorMessage?: string }> => {
+  try {
+    const callable = httpsCallable(functionsClient, 'testTelegramConnection');
+    const res = await callable({});
+    const d = res.data as any;
+    return { ok: !!d?.ok, sent: !!d?.sent };
+  } catch (e: any) {
+    const code = e?.code?.replace('functions/', '') || e?.code || 'unknown';
+    const msg = e?.message || 'Failed to test Telegram connection';
+    return { ok: false, errorCode: code, errorMessage: msg };
+  }
+};
+
+// Cloud functions: secure CallMeBot provider save and connection test
+export const saveCallMeBotProviderSettings = async (
+  data: { phone: string; apikey: string; enabled?: boolean }
+): Promise<{ ok: boolean; errorCode?: string; errorMessage?: string }> => {
+  try {
+    const callable = httpsCallable(functionsClient, 'saveCallMeBotProviderSettings');
+    const res = await callable(data);
+    const d = res.data as any;
+    return { ok: !!d?.ok };
+  } catch (e: any) {
+    const code = e?.code?.replace('functions/', '') || e?.code || 'unknown';
+    const msg = e?.message || 'Failed to save CallMeBot settings';
+    return { ok: false, errorCode: code, errorMessage: msg };
+  }
+};
+
+export const testCallMeBotConnection = async (): Promise<{ ok: boolean; sent?: boolean; errorCode?: string; errorMessage?: string }> => {
+  try {
+    const callable = httpsCallable(functionsClient, 'testCallMeBotConnection');
+    const res = await callable({});
+    const d = res.data as any;
+    return { ok: !!d?.ok, sent: !!d?.sent };
+  } catch (e: any) {
+    const code = e?.code?.replace('functions/', '') || e?.code || 'unknown';
+    const msg = e?.message || 'Failed to test CallMeBot connection';
+    return { ok: false, errorCode: code, errorMessage: msg };
+  }
+};
+
+// Request user permission and register FCM token
+export const requestFcmPermissionAndRegisterToken = async (vapidKey: string): Promise<{ ok: boolean; token?: string; error?: string }> => {
+  try {
+    const messaging = await getMessagingIfSupported();
+    if (!messaging) return { ok: false, error: 'Messaging not supported' };
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') return { ok: false, error: 'Notification permission denied' };
+    const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: swReg });
+    const callable = httpsCallable(functionsClient, 'registerFcmToken');
+    await callable({ token });
+    return { ok: true, token };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Failed to register FCM token' };
+  }
+};
+
+// Verify Telegram Login payload via callable and sign in with Custom Token
+export const verifyTelegramLoginAndSignIn = async (
+  payload: Record<string, unknown>
+): Promise<{ ok: boolean; error?: string }> => {
+  try {
+    const callable = httpsCallable(functionsClient, 'verifyTelegramLogin');
+    const res = await callable(payload);
+    const d = res.data as any;
+    const token = d?.token as string;
+    if (!token) return { ok: false, error: 'No token returned' };
+    const { signInWithCustomToken } = await import('firebase/auth');
+    await signInWithCustomToken(auth, token);
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, error: e?.message || 'Telegram login failed' };
+  }
 };
 
 export const mapSeverityKey = (severity: 'critical' | 'danger' | 'warning' | 'safe'): SeverityKey => {
@@ -750,6 +1123,61 @@ export const subscribeToSystemData = (
     u2();
     u3();
   };
+};
+
+// --- User Notification Preferences (per-user) ---
+export const getUserNotificationPreferences = async (uid: string): Promise<UserNotificationPreferences | null> => {
+  try {
+    const snap = await get(ref(database, `user_settings/${uid}/notifications`));
+    const val = snap.val();
+    return (val || null) as UserNotificationPreferences | null;
+  } catch (e) {
+    console.warn('Failed to read user notification prefs', e);
+    return null;
+  }
+};
+
+export const saveUserNotificationPreferences = async (
+  uid: string,
+  prefs: { telegram_username?: string; types?: Record<string, boolean>; enabled?: boolean }
+): Promise<{ ok: boolean; errorCode?: string; errorMessage?: string }> => {
+  try {
+    const fn = httpsCallable(functionsClient, 'saveUserNotificationPreferences');
+    const res = await fn({ uid, prefs });
+    const data = (res.data || {}) as { ok?: boolean };
+    return { ok: !!data.ok };
+  } catch (e: any) {
+    console.error('saveUserNotificationPreferences error', e);
+    return { ok: false, errorCode: e?.code, errorMessage: e?.message };
+  }
+};
+
+export const resolveTelegramChatIdForUser = async (
+  uid: string
+): Promise<{ ok: boolean; chat_id?: string; errorCode?: string; errorMessage?: string }> => {
+  try {
+    const fn = httpsCallable(functionsClient, 'resolveTelegramChatIdForUser');
+    const res = await fn({ uid });
+    const data = (res.data || {}) as { ok?: boolean; chat_id?: string };
+    return { ok: !!data.ok, chat_id: data.chat_id };
+  } catch (e: any) {
+    console.error('resolveTelegramChatIdForUser error', e);
+    return { ok: false, errorCode: e?.code, errorMessage: e?.message };
+  }
+};
+
+export const sendTestNotificationToUser = async (
+  uid: string
+): Promise<{ ok: boolean; status?: string; errorCode?: string; errorMessage?: string }> => {
+  try {
+    const fn = httpsCallable(functionsClient, 'sendTestNotificationToUser');
+    const res = await fn({ uid });
+    const data = (res.data || {}) as { ok?: boolean; status?: string };
+    return { ok: !!data.ok, status: data.status };
+  } catch (e: any) {
+    console.error('sendTestNotificationToUser error', e);
+    return { ok: false, status: 'error', errorCode: e?.code, errorMessage: e?.message };
+  }
 };
 
 // ===== Motor control with string-based status =====

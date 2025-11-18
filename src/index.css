@@ -18,22 +18,31 @@
 }
 
 @layer base {
+  :root {
+    --brand-indigo: 99,102,241;
+    --brand-emerald: 16,185,129;
+    --dm-overlay: 1; /* 0.8–1.2 for brightness tuning */
+  }
   body {
     @apply bg-gray-50 text-gray-900 font-sans;
-    /* Subtle gradient and texture to improve overall look */
     background-image:
-      radial-gradient(1200px 600px at 0% 0%, rgba(99, 102, 241, 0.06), transparent 60%),
-      radial-gradient(800px 400px at 100% 100%, rgba(16, 185, 129, 0.06), transparent 60%),
+      radial-gradient(1200px 600px at 0% 0%, rgba(var(--brand-indigo), 0.06), transparent 60%),
+      radial-gradient(800px 400px at 100% 100%, rgba(var(--brand-emerald), 0.06), transparent 60%),
       linear-gradient(180deg, rgba(255,255,255,1), rgba(250, 250, 255, 0.9));
     background-attachment: fixed;
+    transition: background-color 300ms ease, color 300ms ease;
   }
   .dark body {
-    @apply bg-gray-950 text-gray-100;
+    @apply bg-[#0b1422] text-gray-200; /* softer dark surface + gentler text */
     background-image:
-      radial-gradient(1200px 600px at 0% 0%, rgba(99, 102, 241, 0.08), transparent 60%),
-      radial-gradient(800px 400px at 100% 100%, rgba(16, 185, 129, 0.08), transparent 60%),
-      linear-gradient(180deg, rgba(2,6,23,1), rgba(2,6,23,0.92));
+      radial-gradient(1200px 600px at 0% 0%, rgba(var(--brand-indigo), 0.08), transparent 60%),
+      radial-gradient(800px 400px at 100% 100%, rgba(var(--brand-emerald), 0.08), transparent 60%),
+      linear-gradient(180deg, rgba(9,12,20,1), rgba(9,12,20,0.94));
     background-attachment: fixed;
+    transition: background-color 300ms ease, color 300ms ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    body, .dark body { transition: none; }
   }
 }
 
@@ -71,8 +80,10 @@
   .gas-bg {
     position: relative;
     overflow: hidden;
-    background: radial-gradient(1200px 600px at 20% 10%, rgba(99,102,241,0.08), transparent 60%),
-                radial-gradient(1000px 500px at 80% 90%, rgba(16,185,129,0.08), transparent 60%),
+    --bg-x: 20%;
+    --bg-y: 10%;
+    background: radial-gradient(1200px 600px at var(--bg-x) var(--bg-y), rgba(var(--brand-indigo),0.08), transparent 60%),
+                radial-gradient(1000px 500px at calc(100% - var(--bg-x)) calc(100% - var(--bg-y)), rgba(var(--brand-emerald),0.08), transparent 60%),
                 linear-gradient(180deg, rgba(255,255,255,0.95), rgba(248,250,252,1));
   }
   .gas-bg::before,
@@ -80,35 +91,66 @@
     content: "";
     position: absolute;
     inset: -30% -20% -20% -30%;
-    background: radial-gradient(closest-side, rgba(99,102,241,0.08), transparent 65%),
-                radial-gradient(closest-side, rgba(16,185,129,0.08), transparent 65%),
-                conic-gradient(from 180deg at 50% 50%, rgba(99,102,241,0.08), rgba(16,185,129,0.08), rgba(99,102,241,0.08));
+    background: radial-gradient(closest-side, rgba(var(--brand-indigo),0.08), transparent 65%),
+                radial-gradient(closest-side, rgba(var(--brand-emerald),0.08), transparent 65%),
+                conic-gradient(from 180deg at 50% 50%, rgba(var(--brand-indigo),0.08), rgba(var(--brand-emerald),0.08), rgba(var(--brand-indigo),0.08));
     filter: blur(40px);
     animation: drift 18s linear infinite;
-    opacity: 0.8;
+    opacity: calc(0.8 * var(--dm-overlay));
     pointer-events: none;
   }
-  .gas-bg::after { animation-duration: 26s; animation-direction: reverse; opacity: 0.6; }
+  .gas-bg::after { animation-duration: 26s; animation-direction: reverse; opacity: calc(0.6 * var(--dm-overlay)); }
 
   .dark .gas-bg {
-    background: radial-gradient(1200px 600px at 20% 10%, rgba(99,102,241,0.06), transparent 60%),
-                radial-gradient(1000px 500px at 80% 90%, rgba(16,185,129,0.06), transparent 60%),
-                linear-gradient(180deg, rgba(2,6,23,1), rgba(2,6,23,0.96));
+    background: radial-gradient(1200px 600px at var(--bg-x) var(--bg-y), rgba(var(--brand-indigo),0.05), transparent 60%),
+                radial-gradient(1000px 500px at calc(100% - var(--bg-x)) calc(100% - var(--bg-y)), rgba(var(--brand-emerald),0.05), transparent 60%),
+                linear-gradient(180deg, rgba(9,12,20,1), rgba(9,12,20,0.96));
   }
 }
 
 @layer utilities {
   .pulse-dot {
     position: relative;
-  }
+    --pulse-color: 16,185,129; /* emerald default */
+    }
   .pulse-dot::before {
     content: "";
     position: absolute;
     inset: -6px;
     border-radius: 9999px;
-    background: rgba(16,185,129,0.25);
+    background: rgba(var(--pulse-color), 0.25);
     animation: pulse 1.8s ease-out infinite;
   }
+  .pulse-green { --pulse-color: 16,185,129; }
+  .pulse-red   { --pulse-color: 239,68,68; }
+
+  /* Micro-interactions */
+  .tap-glow { transition: transform 150ms ease, box-shadow 200ms ease; }
+  .tap-glow:active { transform: scale(0.98); }
+  .card-hover-soft { transition: transform 180ms ease, box-shadow 220ms ease; }
+  .card-hover-soft:hover { transform: translateY(-1px); box-shadow: 0 14px 32px rgba(17,24,39,0.12); }
+  .menu-item-hover { transition: background-color 160ms ease, color 160ms ease; }
+  .menu-item-hover:hover { background-color: rgba(255,255,255,0.06); }
+  .dark .menu-item-hover:hover { background-color: rgba(255,255,255,0.05); }
+
+  /* Neon edge glow for live data pulses */
+  .edge-pulse {
+    box-shadow: 0 0 0 1px rgba(99,102,241,0.35), 0 0 16px rgba(99,102,241,0.25);
+    transition: box-shadow 320ms ease, transform 220ms ease;
+  }
+  .dark .edge-pulse {
+    box-shadow: 0 0 0 1px rgba(99,102,241,0.35), 0 0 18px rgba(99,102,241,0.35);
+  }
+
+  /* Staggered fade/slide for child elements */
+  .stagger-fade > * { opacity: 0; transform: translateY(6px); transition: opacity 300ms ease, transform 300ms ease; }
+  .stagger-fade.ready > * { opacity: 1; transform: translateY(0); }
+  .stagger-fade.ready > *:nth-child(1) { transition-delay: 40ms; }
+  .stagger-fade.ready > *:nth-child(2) { transition-delay: 80ms; }
+  .stagger-fade.ready > *:nth-child(3) { transition-delay: 120ms; }
+  .stagger-fade.ready > *:nth-child(4) { transition-delay: 160ms; }
+  .stagger-fade.ready > *:nth-child(5) { transition-delay: 200ms; }
+  .stagger-fade.ready > *:nth-child(6) { transition-delay: 240ms; }
 }
 
 @keyframes pulse {
@@ -121,4 +163,9 @@
   0% { transform: translate3d(0,0,0) rotate(0deg); }
   50% { transform: translate3d(2%, -1.5%, 0) rotate(180deg); }
   100% { transform: translate3d(0,0,0) rotate(360deg); }
+}
+
+/* Respect reduced motion globally */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }

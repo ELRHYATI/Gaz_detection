@@ -1,11 +1,38 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import Breadcrumbs from '../common/Breadcrumbs'
+import useManualControlSync from '../../hooks/useManualControlSync'
+import startInactivityMonitor from '../../workers/inactivityMonitor'
+import PageTransition from '../common/PageTransition'
+import AlertBanner from '../common/AlertBanner'
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  // Start manual control sync listeners (servo & seuil)
+  useManualControlSync()
+
+  // Start inactivity monitor AFTER auth (Layout is rendered within ProtectedRoute)
+  useEffect(() => {
+    const stop = startInactivityMonitor({ timeoutMs: 30 * 60 * 1000, verifyIntegrity: true, pollIntervalMs: 10_000 })
+    return () => { try { stop?.(); } catch { /* noop */ } }
+  }, [])
+
+  // Interactive ambient background responding to pointer
+  useEffect(() => {
+    const el = document.getElementById('app-bg')
+    if (!el) return
+    const handler = (ev: MouseEvent) => {
+      const rect = el.getBoundingClientRect()
+      const x = ((ev.clientX - rect.left) / rect.width) * 100
+      const y = ((ev.clientY - rect.top) / rect.height) * 100
+      el.style.setProperty('--bg-x', `${Math.round(x)}%`)
+      el.style.setProperty('--bg-y', `${Math.round(y)}%`)
+    }
+    el.addEventListener('pointermove', handler)
+    return () => { el.removeEventListener('pointermove', handler) }
+  }, [])
 
   return (
     <div className="min-h-screen">
@@ -22,8 +49,12 @@ const Layout: React.FC = () => {
         {/* Page content */}
         <main id="main" className="py-4">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Prominent notifications banner */}
+            <AlertBanner />
             <Breadcrumbs />
-            <Outlet />
+            <PageTransition>
+              <Outlet />
+            </PageTransition>
           </div>
         </main>
       </div>

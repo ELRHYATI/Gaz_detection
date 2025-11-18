@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ref, onValue, off } from 'firebase/database';
 import { database } from '../config/firebase';
 
-export type ConnectionStatus = 'connected' | 'reconnecting' | 'polling' | 'disconnected';
+export type ConnectionStatus = 'connected' | 'reconnecting' | 'polling' | 'disconnected' | 'inactive';
 
 export const useRealtimeStatus = () => {
   const [connected, setConnected] = useState<boolean>(true);

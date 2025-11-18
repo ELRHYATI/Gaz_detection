@@ -10,6 +10,7 @@ import {
   FiDatabase
 } from 'react-icons/fi'
 import { useI18n } from '../../contexts/I18nContext'
+import { useSystemMode } from '../../hooks/useSystemMode'
 
 interface SidebarProps {
   isOpen: boolean
@@ -23,10 +24,12 @@ const navigation = [
   { key: 'nav.thresholds', fallback: 'Thresholds', href: '/thresholds', icon: FiSettings },
   { key: 'nav.systemData', fallback: 'System Data', href: '/system-data', icon: FiDatabase },
   { key: 'nav.settings', fallback: 'Settings', href: '/settings', icon: FiSettings },
+  
 ]
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
   const { t } = useI18n();
+  const { mode: systemMode } = useSystemMode();
   return (
     <>
       {/* Mobile backdrop */}
@@ -72,7 +75,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 to={item.href}
                 onClick={onClose}
                 className={({ isActive }) =>
-                  `group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${
+                  `group flex items-center px-3 py-2 text-sm font-medium rounded-lg transition-all duration-200 menu-item-hover ${
                     isActive
                       ? 'bg-primary-100 text-primary-700 border-r-2 border-primary-600 shadow-sm'
                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white'
@@ -98,10 +101,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         <div className="absolute bottom-6 left-3 right-3">
           <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
             <div className="flex items-center space-x-3">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 pulse-dot"></span>
+              <span className={`w-2 h-2 rounded-full ${systemMode === 'inactive' ? 'bg-red-500 pulse-red' : 'bg-emerald-500 pulse-green'} pulse-dot`}></span>
               <div>
-                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{t('status.systemActive', 'System Active')}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">{t('status.monitoring', 'Monitoring')}</p>
+                <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{systemMode === 'inactive' ? t('status.systemInactive', 'System Inactive') : t('status.systemActive', 'System Active')}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">{systemMode === 'inactive' ? 'Inactive' : t('status.monitoring', 'Monitoring')}</p>
               </div>
             </div>
           </div>

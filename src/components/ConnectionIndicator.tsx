@@ -13,6 +13,7 @@ const colorFor = (status: ConnectionStatus) => {
     case 'reconnecting': return '#f59e0b';
     case 'polling': return '#3b82f6';
     case 'disconnected': return '#ef4444';
+    case 'inactive': return '#FF0000';
     default: return '#6b7280';
   }
 };
@@ -38,6 +39,7 @@ export const ConnectionIndicator: React.FC<Props> = ({ status, updating = false,
         {status === 'reconnecting' && 'Reconnecting…'}
         {status === 'polling' && (updating ? 'Polling • updating' : 'Polling')}
         {status === 'disconnected' && 'Offline'}
+        {status === 'inactive' && 'Inactive'}
       </span>
       <style>
         {`

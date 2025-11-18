@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import { useI18n } from '../../contexts/I18nContext'
 import { useRealtimeStatus } from '../../hooks/useRealtimeStatus'
+import { useSystemMode } from '../../hooks/useSystemMode'
 import ConnectionIndicator from '../ConnectionIndicator'
 import { subscribeToAlertLogs, acknowledgeAlertLog, deleteAlertLog } from '../../utils/firebase'
 import type { AlertLogEntry } from '../../utils/firebase'
@@ -87,6 +88,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
   const { t, locale, setLocale } = useI18n();
   const { status } = useRealtimeStatus();
+  const { mode: systemMode } = useSystemMode();
   const visibleNotifications = dropdownView === 'unread' ? notifications.filter(n => !n.acknowledged) : notifications
   return (<>
     <header className="fixed top-0 left-0 right-0 z-40 lg:pl-64 bg-white/90 dark:bg-gray-900/80 backdrop-blur-sm shadow-sm border-b border-gray-200 dark:border-gray-700">
@@ -140,16 +142,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
 
             {/* Status badge */}
             <div className="hidden md:flex items-center space-x-2">
-              <ConnectionIndicator status={status} />
+              <ConnectionIndicator status={(systemMode === 'inactive' ? 'inactive' : status) as any} />
               <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                {status === 'connected' ? 'System Live' : status === 'polling' ? 'Polling' : status === 'reconnecting' ? 'Reconnecting' : 'Offline'}
+                {systemMode === 'inactive' ? 'Inactive' : (status === 'connected' ? 'System Live' : status === 'polling' ? 'Polling' : status === 'reconnecting' ? 'Reconnecting' : 'Offline')}
               </span>
             </div>
 
             {/* Notifications */}
             <div className="relative">
               <button 
-                className="relative p-2 rounded-full border-0 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-300 hover:text-gray-500 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none transition-colors"
+                className={`relative p-2 rounded-full border-0 bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-300 hover:text-gray-500 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none transition-colors ${badgeCount > 0 ? 'pulse-dot pulse-red' : ''}`}
                 onClick={() => setShowNotifications(!showNotifications)}
               >
                 <FiBell className="h-6 w-6" />

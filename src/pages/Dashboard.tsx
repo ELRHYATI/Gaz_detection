@@ -4,6 +4,7 @@ import { subscribeToThreshold } from '../utils/firebase'
 import { calculateAlertLevel } from '../utils/alerts'
 import type { Threshold, AlertLevel } from '../types'
 import MetricCard from '../components/dashboard/MetricCard'
+import Gauge from '../components/common/Gauge'
 import SkeletonCard from '../components/common/SkeletonCard'
 import AlertBanner from '../components/dashboard/AlertBanner'
 import RecentReadings from '../components/dashboard/RecentReadings'
@@ -11,12 +12,14 @@ import ActuatorsCard from '../components/dashboard/ActuatorsCard'
 import { useLatestReadingRealtime } from '../hooks/useLatestReadingRealtime'
 import { useRealtimeStatus } from '../hooks/useRealtimeStatus'
 import ConnectionIndicator from '../components/ConnectionIndicator'
+import { useSystemMode } from '../hooks/useSystemMode'
 import { useAlertsEngine } from '../hooks/useAlertsEngine'
 import AlertModal from '../components/alerts/AlertModal'
 
 const Dashboard: React.FC = () => {
   const { reading: gasReading, updating, error: gasError, mode } = useLatestReadingRealtime()
   const { status } = useRealtimeStatus()
+  const { mode: systemMode } = useSystemMode()
   const { activeAlert, acknowledge } = useAlertsEngine()
   const [_, setDummy] = useState(0) // force re-render to keep "Last update" ticking on slow feeds
   const [thresholds, setThresholds] = useState<Threshold | null>(null)
@@ -91,7 +94,7 @@ const Dashboard: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400">Real-time monitoring of the detection system</p>
         </div>
         <div className="flex items-center gap-3">
-          <ConnectionIndicator status={status === 'connected' ? (mode === 'polling' ? 'polling' : 'connected') : status} updating={updating} />
+          <ConnectionIndicator status={(systemMode === 'inactive' ? 'inactive' : (status === 'connected' ? (mode === 'polling' ? 'polling' : 'connected') : status)) as any} updating={updating} />
           <div className="text-right">
             <p className="text-sm text-gray-500 dark:text-gray-400">Last reading</p>
             <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{lastUpdateTime}</p>
@@ -142,7 +145,17 @@ const Dashboard: React.FC = () => {
           alertLevel={alert}
           className="col-span-1"
           history={gasSeries}
-        />
+        >
+          <Gauge
+            value={Math.max(0, gasReading?.gasLevel || 0)}
+            min={thresholds?.gasMin ?? 0}
+            max={thresholds?.gasMax ?? 200}
+            severity={alert.level as any}
+            size={220}
+            className="mx-auto"
+            label="Gas level gauge"
+          />
+        </MetricCard>
         
         <MetricCard
           title="Temperature"

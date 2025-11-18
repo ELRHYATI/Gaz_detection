@@ -3,6 +3,7 @@ import { FiMoon, FiSun, FiBell, FiAlertTriangle, FiAlertOctagon, FiUser, FiLogOu
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../contexts/I18nContext';
 import { useNavigate } from 'react-router-dom';
+import { getNotificationProvidersSettings, saveNotificationProvidersSettings, saveTelegramProviderSettings, saveCallMeBotProviderSettings } from '../utils/firebase';
 
 const Settings: React.FC = () => {
   const { currentUser, logout } = useAuth();
@@ -19,6 +20,12 @@ const Settings: React.FC = () => {
   const [language, setLanguage] = useState<string>(locale);
   // SMS section removed
 
+  // Dark mode brightness variable (overlays ambient background opacities)
+  const [dmOverlay, setDmOverlay] = useState<number>(() => {
+    const stored = localStorage.getItem('dmOverlay');
+    return stored ? parseFloat(stored) : 1;
+  });
+
   useEffect(() => {
     const root = document.documentElement;
     const storedTheme = localStorage.getItem('theme');
@@ -32,6 +39,13 @@ const Settings: React.FC = () => {
     localStorage.setItem('theme', nextDark ? 'dark' : 'light');
     setDarkMode(nextDark);
   };
+
+  // Apply brightness to CSS variable
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty('--dm-overlay', String(dmOverlay));
+    localStorage.setItem('dmOverlay', String(dmOverlay));
+  }, [dmOverlay]);
 
   const handleLogout = async () => {
     try {
@@ -63,6 +77,65 @@ const Settings: React.FC = () => {
     localStorage.setItem('palette.warning', warn);
   };
 
+  // Notifications Provider (admin)
+  const [providerPrimary, setProviderPrimary] = useState<'telegram' | 'callmebot' | 'none'>('none');
+  const [deliveryMode, setDeliveryMode] = useState<'global' | 'per_user'>('global');
+  const [telegramToken, setTelegramToken] = useState<string>('');
+  const [telegramChatId, setTelegramChatId] = useState<string>('');
+  const [callmePhone, setCallmePhone] = useState<string>('');
+  const [callmeApiKey, setCallmeApiKey] = useState<string>('');
+  const [providerStatus, setProviderStatus] = useState<string>('');
+
+  useEffect(() => {
+    // Load provider settings on mount
+    (async () => {
+      try {
+        const s = await getNotificationProvidersSettings();
+        if (s) {
+          setProviderPrimary((s.primary as any) || 'none');
+          setDeliveryMode((s as any).delivery_mode || 'global');
+          setTelegramToken(s.telegram?.token || '');
+          setTelegramChatId(s.telegram?.chat_id || '');
+          setCallmePhone(s.callmebot?.phone || '');
+          setCallmeApiKey(s.callmebot?.apikey || '');
+        }
+      } catch (e) {
+        setProviderStatus('Failed to load provider settings');
+        console.error(e);
+      }
+    })();
+  }, []);
+
+  const saveProviderSettings = async () => {
+    setProviderStatus('');
+    try {
+      await saveNotificationProvidersSettings({
+        primary: providerPrimary === 'none' ? undefined : providerPrimary,
+        delivery_mode: deliveryMode,
+        // Telegram token is saved securely via Cloud Function below
+        telegram: { token: undefined, chat_id: telegramChatId || undefined },
+        // CallMeBot apikey is saved securely via Cloud Function below
+        callmebot: { phone: callmePhone || undefined, apikey: undefined },
+      } as any);
+      // Save Telegram provider securely
+      if (providerPrimary === 'telegram') {
+        const r = await saveTelegramProviderSettings({ bot_token: telegramToken, chat_id: telegramChatId, enabled: true });
+        if (!r.ok) throw new Error(r.errorMessage || 'Failed to save Telegram settings');
+      }
+      // Save CallMeBot provider securely
+      if (providerPrimary === 'callmebot') {
+        const r2 = await saveCallMeBotProviderSettings({ phone: callmePhone, apikey: callmeApiKey, enabled: true });
+        if (!r2.ok) throw new Error(r2.errorMessage || 'Failed to save CallMeBot settings');
+      }
+      setProviderStatus('Saved successfully');
+    } catch (e) {
+      console.error(e);
+      setProviderStatus('Save failed');
+    }
+  };
+
+  
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -93,6 +166,29 @@ const Settings: React.FC = () => {
               <span>{darkMode ? t('settings.lightMode', 'Light mode') : t('settings.darkMode', 'Dark mode')}</span>
             </span>
           </button>
+        </div>
+
+        {/* Dark mode brightness slider */}
+        <div className="mt-6">
+          <label htmlFor="dm-brightness" className="block text-sm text-gray-700 dark:text-gray-300 mb-1">
+            {t('settings.darkBrightness', 'Dark mode brightness')}
+          </label>
+          <input
+            id="dm-brightness"
+            type="range"
+            min={0.85}
+            max={1.15}
+            step={0.01}
+            value={dmOverlay}
+            onChange={(e) => setDmOverlay(parseFloat(e.target.value))}
+            className="w-full accent-primary-600 dark:accent-primary-400"
+            aria-valuemin={0.85}
+            aria-valuemax={1.15}
+            aria-valuenow={dmOverlay}
+          />
+          <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+            {t('settings.darkBrightnessHelp', 'Fine-tune dark surface brightness for comfort.')}
+          </p>
         </div>
       </div>
 
@@ -149,6 +245,86 @@ const Settings: React.FC = () => {
               <span>{t('settings.notify.warning', 'Warning')}</span>
             </span>
           </label>
+        </div>
+      </div>
+
+      {/* Notifications Provider */}
+      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center space-x-2">
+          <FiBell className="h-5 w-5" />
+          <span>Notifications Provider</span>
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Configure Telegram or CallMeBot and delivery mode.</p>
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Primary Provider</label>
+            <select
+              value={providerPrimary}
+              onChange={(e) => setProviderPrimary(e.target.value as any)}
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            >
+              <option value="none">None</option>
+              <option value="telegram">Telegram</option>
+              <option value="callmebot">CallMeBot (WhatsApp)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Delivery Mode</label>
+            <select
+              value={deliveryMode}
+              onChange={(e) => setDeliveryMode(e.target.value as any)}
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            >
+              <option value="global">Global (one destination)</option>
+              <option value="per_user">Per-User (uses user chat IDs)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Telegram Bot Token</label>
+            <input
+              value={telegramToken}
+              onChange={(e) => setTelegramToken(e.target.value)}
+              placeholder="123456:ABC-DEF..."
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">Telegram Chat ID (Global)</label>
+            <input
+              value={telegramChatId}
+              onChange={(e) => setTelegramChatId(e.target.value)}
+              placeholder="Optional if per-user"
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">CallMeBot Phone (+country number)</label>
+            <input
+              value={callmePhone}
+              onChange={(e) => setCallmePhone(e.target.value)}
+              placeholder="+123456789"
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-700 dark:text-gray-300 mb-1">CallMeBot API Key</label>
+            <input
+              value={callmeApiKey}
+              onChange={(e) => setCallmeApiKey(e.target.value)}
+              placeholder="apikey"
+              className="input-field w-full bg-white/70 dark:bg-gray-800 text-gray-800 dark:text-gray-200"
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            onClick={saveProviderSettings}
+            className="px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700"
+          >
+            Save Provider Settings
+          </button>
+          
+          {providerStatus && <span className="text-sm text-gray-600 dark:text-gray-400">{providerStatus}</span>}
         </div>
       </div>
 

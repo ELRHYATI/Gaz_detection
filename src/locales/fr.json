@@ -94,4 +94,11 @@
   "notifications.maintenance": "Maintenance Terminée",
   "notifications.maintenanceDesc": "La maintenance programmée a été terminée",
   "notifications.viewAll": "Voir toutes les notifications"
+  ,
+  "alerts.critical": "Alerte Critique",
+  "alerts.danger": "Avertissement",
+  "alerts.warning": "Information",
+  "alerts.dismiss": "Fermer",
+  "alerts.acknowledge": "Reconnaître",
+  "alerts.viewDetails": "Voir les détails"
 }

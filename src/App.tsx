@@ -5,8 +5,6 @@ import { AuthProvider } from './contexts/AuthProvider';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import Layout from './components/layout/Layout';
 const Login = lazy(() => import('./components/auth/Login'));
-const Register = lazy(() => import('./components/auth/Register'));
-const ForgotPassword = lazy(() => import('./components/auth/ForgotPassword'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
 const MotorControl = lazy(() => import('./pages/MotorControl'));
 const Thresholds = lazy(() => import('./pages/Thresholds'));
@@ -20,31 +18,31 @@ import { I18nProvider } from './contexts/I18nContext';
 import en from './locales/en.json';
 import fr from './locales/fr.json';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import LoadingDots from './components/common/LoadingDots';
 
 function App() {
   return (
     <AuthProvider>
       <I18nProvider messages={{ en, fr }}>
       <Router>
-        <div className="min-h-screen gas-bg">
+        <div className="min-h-screen gas-bg" id="app-bg">
           <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading…</div>}><Login /></Suspense>} />
-            <Route path="/register" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading…</div>}><Register /></Suspense>} />
-            <Route path="/forgot-password" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading…</div>}><ForgotPassword /></Suspense>} />
+            {/* Public route */}
+            <Route path="/login" element={<Suspense fallback={<LoadingDots label="Loading…" />}><Login /></Suspense>} />
             
             {/* Protected routes */}
             <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
               <Route index element={<Navigate to="/dashboard" replace />} />
-              <Route path="dashboard" element={<ErrorBoundary fallback={<div className='p-6 text-center text-red-700 dark:text-red-300'>Failed to load dashboard. Please reload.</div>}><Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading dashboard…</div>}><Dashboard /></Suspense></ErrorBoundary>} />
-              <Route path="motor-control" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading motor control…</div>}><MotorControl /></Suspense>} />
-              <Route path="thresholds" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading thresholds…</div>}><Thresholds /></Suspense>} />
-              <Route path="history" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading history…</div>}><History /></Suspense>} />
-              <Route path="settings" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading settings…</div>}><Settings /></Suspense>} />
-              <Route path="settings-semantic" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading settings…</div>}><SettingsSemantic /></Suspense>} />
-              <Route path="notifications" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading notifications…</div>}><Notifications /></Suspense>} />
-              <Route path="system-data" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading system data…</div>}><SystemData /></Suspense>} />
-              <Route path="style-guide" element={<Suspense fallback={<div className='p-6 text-center text-gray-600 dark:text-gray-300'>Loading…</div>}><StyleGuide /></Suspense>} />
+              <Route path="dashboard" element={<ErrorBoundary fallback={<div className='p-6 text-center text-red-700 dark:text-red-300'>Failed to load dashboard. Please reload.</div>}><Suspense fallback={<LoadingDots label="Loading dashboard…" />}><Dashboard /></Suspense></ErrorBoundary>} />
+              <Route path="motor-control" element={<Suspense fallback={<LoadingDots label="Loading motor control…" />}><MotorControl /></Suspense>} />
+              <Route path="thresholds" element={<Suspense fallback={<LoadingDots label="Loading thresholds…" />}><Thresholds /></Suspense>} />
+              <Route path="history" element={<Suspense fallback={<LoadingDots label="Loading history…" />}><History /></Suspense>} />
+              <Route path="settings" element={<Suspense fallback={<LoadingDots label="Loading settings…" />}><Settings /></Suspense>} />
+              <Route path="settings-semantic" element={<Suspense fallback={<LoadingDots label="Loading settings…" />}><SettingsSemantic /></Suspense>} />
+              
+              <Route path="notifications" element={<Suspense fallback={<LoadingDots label="Loading notifications…" />}><Notifications /></Suspense>} />
+              <Route path="system-data" element={<Suspense fallback={<LoadingDots label="Loading system data…" />}><SystemData /></Suspense>} />
+              <Route path="style-guide" element={<Suspense fallback={<LoadingDots label="Loading…" />}><StyleGuide /></Suspense>} />
             </Route>
             
             {/* Catch all route */}

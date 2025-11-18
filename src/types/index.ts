@@ -98,3 +98,16 @@ export interface MotorLog {
   success?: boolean;
   error?: string;
 }
+
+// Per-user notification preferences
+export interface UserNotificationPreferences {
+  enabled?: boolean;
+  telegram_username_mask?: string; // stored mask for display only
+  telegram_chat_id?: string; // resolved chat id when available
+  types?: {
+    messages?: boolean;
+    updates?: boolean;
+    promotions?: boolean;
+  };
+  last_updated?: number;
+}

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { IconType } from 'react-icons';
 import { FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
 import type { AlertLevel } from '../../types';
@@ -14,6 +14,7 @@ interface MetricCardProps {
   alertLevel: AlertLevel;
   className?: string;
   history?: number[];
+  children?: React.ReactNode;
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -24,7 +25,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
   trend,
   alertLevel,
   className = '',
-  history = []
+  history = [],
+  children
 }) => {
   const badgeClasses = getAlertBadgeClasses(alertLevel.level);
   const progressColor =
@@ -33,8 +35,21 @@ const MetricCard: React.FC<MetricCardProps> = ({
     alertLevel.level === 'warning' ? 'bg-yellow-500' :
     'bg-green-500';
 
+  // Live data pulse when value updates
+  const prev = useRef<number>(value);
+  const [pulse, setPulse] = useState(false);
+  useEffect(() => {
+    if (prev.current !== value && Number.isFinite(value)) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 800);
+      prev.current = value;
+      return () => clearTimeout(t);
+    }
+    prev.current = value;
+  }, [value]);
+
   return (
-    <div className={`bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 ${className}`}>
+    <div className={`bg-white dark:bg-gray-900 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 ${pulse ? 'edge-pulse' : ''} ${className}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-3">
           <div className={`p-2 rounded-lg bg-gray-100 dark:bg-gray-800`}>
@@ -72,6 +87,12 @@ const MetricCard: React.FC<MetricCardProps> = ({
       <div className="mt-4 h-2 bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden">
         <div className={`h-full transition-all duration-500 ${progressColor}`} style={{ width: `${Math.min((value / 200) * 100, 100)}%` }} />
       </div>
+
+      {children && (
+        <div className="mt-5">
+          {children}
+        </div>
+      )}
     </div>
   );
 };

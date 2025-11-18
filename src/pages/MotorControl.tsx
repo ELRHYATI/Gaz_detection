@@ -18,6 +18,7 @@ const MotorControl: React.FC = () => {
   const [fenetresError, setFenetresError] = useState<string | null>(null);
   const [servoCmd, setServoCmd] = useState<'open' | 'closed' | null>(null);
   const [servoCmdError, setServoCmdError] = useState<string | null>(null);
+  const [statusPulse, setStatusPulse] = useState(false);
 
   useEffect(() => {
     const u1 = subscribeToMotorStatus((_status) => {
@@ -38,6 +39,15 @@ const MotorControl: React.FC = () => {
     }, (err) => setServoCmdError(err.message || String(err)));
     return () => { u1(); u2(); u3(); u4(); u5(); };
   }, [currentUser?.email]);
+
+  // Micro-animation when window actuator state changes
+  useEffect(() => {
+    if (fenetresAct !== null) {
+      setStatusPulse(true);
+      const t = setTimeout(() => setStatusPulse(false), 400);
+      return () => clearTimeout(t);
+    }
+  }, [fenetresAct]);
 
   const toggleMotor = async () => {
     setLoading(true);
@@ -153,183 +163,7 @@ const MotorControl: React.FC = () => {
           </div>
         </div>
 
-        {/* Controls Card (manual servo commands) */}
-        <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-          <div className="px-6 py-4 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-pink-500/20 dark:from-indigo-400/10 dark:via-purple-400/10 dark:to-pink-400/10">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Commandes (servo manuel)</h3>
-          </div>
-          <div className="p-6 space-y-5">
-            {/* Big action button */}
-            <button
-              onClick={toggleMotor}
-              disabled={loading || !wc?.manual_override}
-              className={`w-full inline-flex items-center justify-center rounded-lg px-4 py-3 font-medium transition-all
-                ${loading || !wc?.manual_override ? 'opacity-60 cursor-not-allowed' : ''}
-                ${wc?.current_state === 'open' ? 'bg-rose-600 hover:bg-rose-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}
-            >
-              {loading ? 'Mise à jour...' : wc?.current_state === 'open' ? 'Fermer' : 'Ouvrir'}
-            </button>
-
-            {/* Fancy toggle */}
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Basculer l'état</span>
-              <button
-                onClick={toggleMotor}
-                disabled={loading || !wc?.manual_override}
-                aria-label="Basculer l'état du servomoteur"
-                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${wc?.current_state === 'open' ? 'bg-emerald-500' : 'bg-gray-400'} ${loading || !wc?.manual_override ? 'opacity-60 cursor-not-allowed' : 'hover:brightness-110'}`}
-              >
-                <span className={`inline-block h-7 w-7 rounded-full bg-white shadow transform transition-transform ${wc?.current_state === 'open' ? 'translate-x-7' : 'translate-x-1'}`} />
-              </button>
-            </div>
-
-            {/* Explicit overrides */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setState('closed')}
-                disabled={loading || !wc?.manual_override}
-                className="w-full rounded-lg px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium"
-              >
-                Forcer: Fermer
-              </button>
-              <button
-                onClick={() => setState('open')}
-                disabled={loading || !wc?.manual_override}
-                className="w-full rounded-lg px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-              >
-                Forcer: Ouvrir
-              </button>
-            </div>
-
-            {/* Safety note */}
-            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-900/30 p-3 text-sm text-amber-800 dark:text-amber-200">
-              Assurez-vous que la zone est sécurisée avant de changer l'état.
-            </div>
-
-            {error && (
-              <div className="text-sm text-danger-700 dark:text-danger-400">{error}</div>
-            )}
-
-            {/* Manual command channel: commandes/servo_manuel */}
-            <div className="mt-6 border-t border-gray-200 dark:border-gray-700 pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">Canal de commande RTDB</div>
-                  <div className="font-mono text-xs text-gray-700 dark:text-gray-300">commandes/servo_manuel</div>
-                </div>
-                <div className={`text-sm font-medium ${servoCmd === 'open' ? 'text-emerald-600 dark:text-emerald-300' : servoCmd === 'closed' ? 'text-rose-600 dark:text-rose-300' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {servoCmd === 'open' ? 'Valeur actuelle: open' : servoCmd === 'closed' ? 'Valeur actuelle: closed' : '—'}
-                </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <button
-                  onClick={async () => {
-                    setServoCmdError(null);
-                    try { await setServoManuelCommand('closed'); }
-                    catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de l\'écriture'; setServoCmdError(message); }
-                  }}
-                  className="w-full rounded-lg px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium"
-                >
-                  Écrire: closed
-                </button>
-                <button
-                  onClick={async () => {
-                    setServoCmdError(null);
-                    try { await setServoManuelCommand('open'); }
-                    catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de l\'écriture'; setServoCmdError(message); }
-                  }}
-                  className="w-full rounded-lg px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-                >
-                  Écrire: open
-                </button>
-              </div>
-              {servoCmdError && (
-                <div className="mt-2 text-sm text-danger-700 dark:text-danger-400">{servoCmdError}</div>
-              )}
-              <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Écrire ici déclenche l\'application par fonctions Cloud et active le mode manuel automatiquement.
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Window Control Card */}
-        <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-          <div className="px-6 py-4 bg-gradient-to-r from-blue-500/20 via-cyan-500/20 to-teal-500/20 dark:from-blue-400/10 dark:via-cyan-400/10 dark:to-teal-400/10">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Contrôle de la fenêtre</h3>
-          </div>
-          <div className="p-6 space-y-5">
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                <div className="text-gray-600 dark:text-gray-400">État actuel</div>
-                <div className={`font-medium ${wc?.current_state === 'open' ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{wc ? (wc.current_state === 'open' ? 'Ouvert' : 'Fermé') : '—'}</div>
-              </div>
-              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                <div className="text-gray-600 dark:text-gray-400">Position du servo</div>
-                <div className="font-medium text-gray-900 dark:text-gray-100">{wc ? `${wc.servo_position}°` : '—'}</div>
-              </div>
-              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 col-span-2">
-                <div className="text-gray-600 dark:text-gray-400">Dernière mise à jour</div>
-                <div className="font-medium text-gray-900 dark:text-gray-100">{wc?.last_updated ? new Date(wc.last_updated).toLocaleString() : '—'}</div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600 dark:text-gray-400">Mode manuel (override)</span>
-              <button
-                onClick={async () => {
-                  setWcError(null);
-                  try {
-                    await setWindowManualOverride(!wc?.manual_override);
-                  } catch (e: unknown) {
-                    const message = e instanceof Error ? e.message : 'Erreur lors du changement du mode manuel';
-                    setWcError(message);
-                  }
-                }}
-                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${wc?.manual_override ? 'bg-emerald-500' : 'bg-gray-400'}`}
-              >
-                <span className={`inline-block h-7 w-7 rounded-full bg-white shadow transform transition-transform ${wc?.manual_override ? 'translate-x-7' : 'translate-x-1'}`} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={async () => {
-                  setWcError(null);
-                  try {
-                    await setWindowControlState('closed');
-                  } catch (e: unknown) {
-                    const message = e instanceof Error ? e.message : 'Erreur lors de la fermeture de la fenêtre';
-                    setWcError(message);
-                  }
-                }}
-                disabled={!wc?.manual_override}
-                className={`w-full rounded-lg px-4 py-2 ${wc?.manual_override ? 'bg-rose-600 hover:bg-rose-700' : 'bg-gray-400'} text-white font-medium`}
-              >
-                Fermer la fenêtre
-              </button>
-              <button
-                onClick={async () => {
-                  setWcError(null);
-                  try {
-                    await setWindowControlState('open');
-                  } catch (e: unknown) {
-                    const message = e instanceof Error ? e.message : 'Erreur lors de l\'ouverture de la fenêtre';
-                    setWcError(message);
-                  }
-                }}
-                disabled={!wc?.manual_override}
-                className={`w-full rounded-lg px-4 py-2 ${wc?.manual_override ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-gray-400'} text-white font-medium`}
-              >
-                Ouvrir la fenêtre
-              </button>
-            </div>
-
-            {wcError && (
-              <div className="text-sm text-danger-700 dark:text-danger-400">{wcError}</div>
-            )}
-          </div>
-        </div>
+        
       </div>
       
       {/* Actionneurs/Fenêtres Card */}
@@ -338,58 +172,59 @@ const MotorControl: React.FC = () => {
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">Fenêtres (actionneurs)</h3>
         </div>
         <div className="p-6 space-y-5">
-          <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="grid grid-cols-1 gap-3 text-sm">
             <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
               <div className="text-gray-600 dark:text-gray-400">État actuel</div>
-              <div className={`font-medium ${fenetresAct === 'OUVERT' ? 'text-emerald-600 dark:text-emerald-300' : 'text-rose-600 dark:text-rose-300'}`}>{fenetresAct ? (fenetresAct === 'OUVERT' ? 'Ouvert' : 'Fermé') : '—'}</div>
-            </div>
-            <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-              <div className="text-gray-600 dark:text-gray-400">Chemin</div>
-              <div className="font-mono text-xs text-gray-700 dark:text-gray-300">actionneurs/fenetres</div>
+              <div className={`mt-1 inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium transition-transform duration-300 ${statusPulse ? 'scale-105 shadow-sm' : ''} ${
+                fenetresAct === 'OUVERT'
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+                  : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800'
+              }`}>
+                {fenetresAct === 'OUVERT' ? (
+                  <>
+                    <FiCheck className="mr-1 h-4 w-4" /> Ouvert
+                  </>
+                ) : (
+                  <>
+                    <FiX className="mr-1 h-4 w-4" /> Fermé
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600 dark:text-gray-400">Basculer la fenêtre</span>
-            <button
-              onClick={async () => {
-                setFenetresError(null);
-                try {
-                  const next = fenetresAct === 'OUVERT' ? 'FERME' : 'OUVERT';
-                  await setActionneursFenetre(next, currentUser?.email || 'system');
-                } catch (e: unknown) {
-                  const message = e instanceof Error ? e.message : 'Erreur lors de la mise à jour de la fenêtre';
-                  setFenetresError(message);
-                }
-              }}
-              aria-label="Basculer l'état de la fenêtre"
-              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${fenetresAct === 'OUVERT' ? 'bg-emerald-500' : 'bg-gray-400'} hover:brightness-110`}
-            >
-              <span className={`inline-block h-7 w-7 rounded-full bg-white shadow transform transition-transform ${fenetresAct === 'OUVERT' ? 'translate-x-7' : 'translate-x-1'}`} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={async () => {
-                setFenetresError(null);
-                try { await setActionneursFenetre('FERME', currentUser?.email || 'system'); }
-                catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de la fermeture'; setFenetresError(message); }
-              }}
-              className="w-full rounded-lg px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-medium"
-            >
-              Fermer
-            </button>
-            <button
-              onClick={async () => {
-                setFenetresError(null);
-                try { await setActionneursFenetre('OUVERT', currentUser?.email || 'system'); }
-                catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de l\'ouverture'; setFenetresError(message); }
-              }}
-              className="w-full rounded-lg px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
-            >
-              Ouvrir
-            </button>
+          {/* Creative segmented control for open/close */}
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-gray-600 dark:text-gray-400">Contrôle</span>
+              <div className="relative inline-flex rounded-full overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 text-xs">
+                {/* Animated highlight */}
+                <span
+                  className={`absolute inset-y-0 left-0 w-1/2 rounded-full opacity-20 transition-transform duration-300 ease-out ${fenetresAct === 'OUVERT' ? 'translate-x-full bg-emerald-600' : 'translate-x-0 bg-rose-600'}`}
+                />
+                <button
+                  onClick={async () => {
+                    setFenetresError(null);
+                    try { await setActionneursFenetre('FERME', currentUser?.email || 'system'); }
+                    catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de la fermeture'; setFenetresError(message); }
+                  }}
+                  className={`relative px-3 py-1 font-medium flex items-center gap-1 transition-colors ${fenetresAct === 'FERME' ? 'text-white' : 'text-gray-800 dark:text-gray-200 hover:bg-rose-100 dark:hover:bg-rose-900/30'}`}
+                >
+                  <FiX className="h-3 w-3" /> Fermer
+                </button>
+                <button
+                  onClick={async () => {
+                    setFenetresError(null);
+                    try { await setActionneursFenetre('OUVERT', currentUser?.email || 'system'); }
+                    catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de l\'ouverture'; setFenetresError(message); }
+                  }}
+                  className={`relative px-3 py-1 font-medium flex items-center gap-1 transition-colors ${fenetresAct === 'OUVERT' ? 'text-white' : 'text-gray-800 dark:text-gray-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}
+                >
+                  <FiCheck className="h-3 w-3" /> Ouvrir
+                </button>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-gray-500 dark:text-gray-400">Le changement s'applique instantanément et synchronise le servomoteur.</p>
           </div>
 
           {fenetresError && (

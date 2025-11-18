@@ -94,4 +94,11 @@
   "notifications.maintenance": "Maintenance Complete",
   "notifications.maintenanceDesc": "Scheduled maintenance has been completed",
   "notifications.viewAll": "View all notifications"
+  ,
+  "alerts.critical": "Critical Alert",
+  "alerts.danger": "Warning",
+  "alerts.warning": "Information",
+  "alerts.dismiss": "Dismiss",
+  "alerts.acknowledge": "Acknowledge",
+  "alerts.viewDetails": "View details"
 }

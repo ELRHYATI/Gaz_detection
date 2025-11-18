@@ -38,6 +38,8 @@ const Thresholds: React.FC = () => {
     return () => unsubscribe();
   }, [setValue]);
 
+  
+
   const onSubmit = async (data: Threshold) => {
     const payload = {
       gasMin: Number(data.gasMin),
