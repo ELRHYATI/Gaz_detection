@@ -5,7 +5,7 @@ import { subscribeToAlertLogs, acknowledgeAlertLog, deleteAlertLog } from '../ut
 import type { AlertLogEntry } from '../utils/firebase';
 import { useLocation, useNavigate } from 'react-router-dom';
 
-const Notifications: React.FC = () => {
+  const Notifications: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const location = useLocation();
@@ -111,6 +111,18 @@ const Notifications: React.FC = () => {
     await Promise.all(ids.map((id) => deleteAlertLog(id)));
   };
 
+  // BroadcastChannel to notify global header about deletes/acks immediately
+  const [alertsChannel] = useState(() => {
+    try {
+      return new (window as any).BroadcastChannel('alerts');
+    } catch {
+      return null;
+    }
+  });
+  useEffect(() => {
+    return () => { try { (alertsChannel as any)?.close?.(); } catch {} };
+  }, [alertsChannel]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -205,7 +217,7 @@ const Notifications: React.FC = () => {
                       {!n.acknowledged ? (
                         <button
                           className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200"
-                          onClick={(e) => { e.stopPropagation(); if (n.id) acknowledgeAlertLog(n.id) }}
+                          onClick={(e) => { e.stopPropagation(); if (n.id) { acknowledgeAlertLog(n.id); try { (alertsChannel as any)?.postMessage?.({ type: 'acknowledged', id: n.id }); } catch {} } }}
                         >
                           Mark read
                         </button>
@@ -215,7 +227,7 @@ const Notifications: React.FC = () => {
                       {n.id && (
                         <button
                           className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded bg-danger-50 dark:bg-danger-900/30 hover:bg-danger-100 dark:hover:bg-danger-800 text-danger-700 dark:text-danger-300"
-                          onClick={(e) => { e.stopPropagation(); deleteAlertLog(n.id!); setNotifications((prev) => prev.filter((x) => x.id !== n.id)); }}
+                          onClick={(e) => { e.stopPropagation(); deleteAlertLog(n.id!); setNotifications((prev) => prev.filter((x) => x.id !== n.id)); try { (alertsChannel as any)?.postMessage?.({ type: 'deleted', id: n.id }); } catch {} }}
                         >
                           <FiTrash2 className="h-3 w-3" />
                           Delete

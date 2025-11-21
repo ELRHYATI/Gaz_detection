@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FiToggleLeft, FiCheck, FiX, FiRotateCcw } from 'react-icons/fi';
-import { subscribeToMotorStatus, subscribeToMotorState, subscribeToWindowControl, setWindowManualOverride, setWindowControlState, subscribeToActionneursFenetre, setActionneursFenetre, subscribeToServoManuelCommand, setServoManuelCommand } from '../utils/firebase';
+import { subscribeToMotorStatus, subscribeToMotorState, subscribeToWindowControl, subscribeToActionneursFenetre, setActionneursFenetre } from '../utils/firebase';
 import type { MotorStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,16 +8,11 @@ const MotorControl: React.FC = () => {
   const { currentUser } = useAuth();
   // commanded status not used in UI; track last update/actor only
   const [actual, setActual] = useState<MotorStatus | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [updatedBy, setUpdatedBy] = useState<string | null>(null);
   const [wc, setWc] = useState<{ current_state: 'open'|'closed'; servo_position: number; last_updated: number; manual_override: boolean } | null>(null);
-  const [wcError, setWcError] = useState<string | null>(null);
   const [fenetresAct, setFenetresAct] = useState<'FERME' | 'OUVERT' | null>(null);
   const [fenetresError, setFenetresError] = useState<string | null>(null);
-  const [servoCmd, setServoCmd] = useState<'open' | 'closed' | null>(null);
-  const [servoCmdError, setServoCmdError] = useState<string | null>(null);
   const [statusPulse, setStatusPulse] = useState(false);
 
   useEffect(() => {
@@ -30,14 +25,11 @@ const MotorControl: React.FC = () => {
     });
     const u3 = subscribeToWindowControl((ctrl) => {
       setWc(ctrl);
-    }, (err) => setWcError(err.message || String(err)));
+    }, (err) => { console.error(err); });
     const u4 = subscribeToActionneursFenetre((state) => {
       setFenetresAct(state);
     }, (err) => setFenetresError(err.message || String(err)));
-    const u5 = subscribeToServoManuelCommand((cmd) => {
-      setServoCmd(cmd);
-    }, (err) => setServoCmdError(err.message || String(err)));
-    return () => { u1(); u2(); u3(); u4(); u5(); };
+    return () => { u1(); u2(); u3(); u4(); };
   }, [currentUser?.email]);
 
   // Micro-animation when window actuator state changes
@@ -49,40 +41,7 @@ const MotorControl: React.FC = () => {
     }
   }, [fenetresAct]);
 
-  const toggleMotor = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!wc?.manual_override) {
-        setError('Activez le mode manuel pour envoyer des commandes au servomoteur');
-        return;
-      }
-      const next: MotorStatus = wc?.current_state === 'open' ? 'closed' : 'open';
-      await setWindowControlState(next);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Erreur lors de la mise à jour du servomoteur';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const setState = async (state: MotorStatus) => {
-    setLoading(true);
-    setError(null);
-    try {
-      if (!wc?.manual_override) {
-        setError('Activez le mode manuel pour envoyer des commandes au servomoteur');
-        return;
-      }
-      await setWindowControlState(state);
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Erreur lors de la mise à jour du servomoteur';
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Manual motor control is handled via actionneurs/fenetres for this UI variant
 
   return (
     <div className="space-y-6">
@@ -163,11 +122,73 @@ const MotorControl: React.FC = () => {
           </div>
         </div>
 
-        
+        {/* Actionneurs/Fenêtres Card (compact right for desktop) */}
+        <div className="hidden lg:block rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 lg:max-w-sm lg:justify-self-end">
+          <div className="px-6 py-4 bg-gradient-to-r from-teal-500/20 via-green-500/20 to-lime-500/20 dark:from-teal-400/10 dark:via-green-400/10 dark:to-lime-400/10">
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Fenêtres (actionneurs)</h3>
+          </div>
+          <div className="p-6 space-y-4">
+            <div className="grid grid-cols-1 gap-3 text-sm">
+              <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <div className="text-gray-600 dark:text-gray-400">État actuel</div>
+                <div className={`mt-1 inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium transition-transform duration-300 ${statusPulse ? 'scale-105 shadow-sm' : ''} ${
+                  fenetresAct === 'OUVERT'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
+                    : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800'
+                }`}>
+                  {fenetresAct === 'OUVERT' ? (
+                    <>
+                      <FiCheck className="mr-1 h-4 w-4" /> Ouvert
+                    </>
+                  ) : (
+                    <>
+                      <FiX className="mr-1 h-4 w-4" /> Fermé
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Compact buttons */}
+            <div>
+              <span className="text-xs text-gray-600 dark:text-gray-400">Contrôle</span>
+              <div className="mt-2 space-y-2">
+                <button
+                  onClick={async () => {
+                    setFenetresError(null);
+                    try { await setActionneursFenetre('FERME', currentUser?.email || 'system'); }
+                    catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de la fermeture'; setFenetresError(message); }
+                  }}
+                  className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold shadow-sm transition-colors border ${fenetresAct === 'FERME' ? 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700' : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800'}`}
+                  aria-pressed={fenetresAct === 'FERME'}
+                >
+                  <FiX className="h-4 w-4" /> Fermer
+                </button>
+                <button
+                  onClick={async () => {
+                    setFenetresError(null);
+                    try { await setActionneursFenetre('OUVERT', currentUser?.email || 'system'); }
+                    catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de l\'ouverture'; setFenetresError(message); }
+                  }}
+                  className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold shadow-sm transition-colors border ${fenetresAct === 'OUVERT' ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800'}`}
+                  aria-pressed={fenetresAct === 'OUVERT'}
+                >
+                  <FiCheck className="h-4 w-4" /> Ouvrir
+                </button>
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">Le changement s'applique instantanément et synchronise le servomoteur.</p>
+              </div>
+            </div>
+
+            {fenetresError && (
+              <div className="text-sm text-danger-700 dark:text-danger-400">{fenetresError}</div>
+            )}
+          </div>
+        </div>
+
       </div>
       
       {/* Actionneurs/Fenêtres Card */}
-      <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
+      <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 lg:hidden">
         <div className="px-6 py-4 bg-gradient-to-r from-teal-500/20 via-green-500/20 to-lime-500/20 dark:from-teal-400/10 dark:via-green-400/10 dark:to-lime-400/10">
           <h3 className="font-semibold text-gray-900 dark:text-gray-100">Fenêtres (actionneurs)</h3>
         </div>

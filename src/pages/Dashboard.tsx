@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { FiActivity, FiThermometer, FiDroplet } from 'react-icons/fi'
+import { startTrace } from '../utils/apm'
 import { subscribeToThreshold } from '../utils/firebase'
 import { calculateAlertLevel } from '../utils/alerts'
 import type { Threshold, AlertLevel } from '../types'
 import MetricCard from '../components/dashboard/MetricCard'
-import Gauge from '../components/common/Gauge'
 import SkeletonCard from '../components/common/SkeletonCard'
 import AlertBanner from '../components/dashboard/AlertBanner'
 import RecentReadings from '../components/dashboard/RecentReadings'
@@ -15,6 +15,7 @@ import ConnectionIndicator from '../components/ConnectionIndicator'
 import { useSystemMode } from '../hooks/useSystemMode'
 import { useAlertsEngine } from '../hooks/useAlertsEngine'
 import AlertModal from '../components/alerts/AlertModal'
+import ApmMonitor from '../components/common/ApmMonitor'
 
 const Dashboard: React.FC = () => {
   const { reading: gasReading, updating, error: gasError, mode } = useLatestReadingRealtime()
@@ -56,11 +57,19 @@ const Dashboard: React.FC = () => {
 
   // Stop initial spinner once we have data or an error, or after a short timeout
   useEffect(() => {
-    if (gasReading || gasError) setLoading(false)
+    // Trace: temps jusqu'à première donnée/erreur
+    const t = startTrace('dashboard_initial_reading', { route: '/dashboard' })
+    if (gasReading || gasError) {
+      setLoading(false)
+      try { t?.stop() } catch {}
+    }
   }, [gasReading, gasError])
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 3000)
+    // Fallback: arrêter la trace si aucune donnée en 3s
+    const t = startTrace('dashboard_initial_render_fallback', { route: '/dashboard' })
+    setTimeout(() => { try { t?.stop() } catch {} }, 3000)
     return () => clearTimeout(timer)
   }, [])
 
@@ -101,6 +110,10 @@ const Dashboard: React.FC = () => {
             {isStale && (
               <p className="text-xs text-amber-600 dark:text-amber-400">Not current (data older than 90s)</p>
             )}
+            {/* Compact Performance monitor */}
+            <div className="mt-1">
+              <ApmMonitor compact />
+            </div>
           </div>
         </div>
       </div>
@@ -146,17 +159,9 @@ const Dashboard: React.FC = () => {
           className="col-span-1"
           history={gasSeries}
         >
-          <Gauge
-            value={Math.max(0, gasReading?.gasLevel || 0)}
-            min={thresholds?.gasMin ?? 0}
-            max={thresholds?.gasMax ?? 200}
-            severity={alert.level as any}
-            size={220}
-            className="mx-auto"
-            label="Gas level gauge"
-          />
+          {/* Gauge removed per request */}
         </MetricCard>
-        
+
         <MetricCard
           title="Temperature"
           value={gasReading?.temperature || 0}

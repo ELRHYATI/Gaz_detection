@@ -6,8 +6,7 @@ import {
   FiToggleLeft, 
   FiX,
   FiBarChart2,
-  FiWind,
-  FiDatabase
+  FiWind
 } from 'react-icons/fi'
 import { useI18n } from '../../contexts/I18nContext'
 import { useSystemMode } from '../../hooks/useSystemMode'
@@ -22,8 +21,6 @@ const navigation = [
   { key: 'nav.history', fallback: 'History', href: '/history', icon: FiBarChart2 },
   { key: 'nav.motorControl', fallback: 'Motor Control', href: '/motor-control', icon: FiToggleLeft },
   { key: 'nav.thresholds', fallback: 'Thresholds', href: '/thresholds', icon: FiSettings },
-  { key: 'nav.systemData', fallback: 'System Data', href: '/system-data', icon: FiDatabase },
-  { key: 'nav.settings', fallback: 'Settings', href: '/settings', icon: FiSettings },
   
 ]
 

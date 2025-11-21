@@ -1016,10 +1016,11 @@ const activeAlertPath = (fingerprint: string) => `alerts_active/${fingerprint}`;
 export const upsertActiveAlert = async (fingerprint: string, record: Omit<ActiveAlertRecord, 'started_at' | 'expires_at' | 'last_updated'> & { started_at?: number; expires_at?: number }) => {
   const path = activeAlertPath(fingerprint);
   const snap = await get(ref(database, path));
+  const prev = snap.exists() ? (snap.val() as any) : {};
   const now = Date.now();
-  const started = snap.exists() && typeof (snap.val() as any).started_at === 'number' ? (snap.val() as any).started_at : (record.started_at || now);
+  const started = typeof prev.started_at === 'number' ? prev.started_at : (record.started_at ?? now);
   const expires = record.expires_at ?? (started + 10 * 60 * 1000);
-  const merged: ActiveAlertRecord = {
+  const merged: any = {
     severity: record.severity,
     parameter: record.parameter,
     value: record.value,
@@ -1028,12 +1029,12 @@ export const upsertActiveAlert = async (fingerprint: string, record: Omit<Active
     started_at: started,
     last_updated: now,
     expires_at: expires,
-    dismissed: snap.exists() ? (snap.val() as any).dismissed : false,
-    dismiss_reason: snap.exists() ? (snap.val() as any).dismiss_reason : undefined,
-    resolved_at: snap.exists() ? (snap.val() as any).resolved_at : undefined,
+    dismissed: typeof prev.dismissed === 'boolean' ? prev.dismissed : false,
   };
+  if (typeof prev.dismiss_reason === 'string') merged.dismiss_reason = prev.dismiss_reason;
+  if (typeof prev.resolved_at === 'number') merged.resolved_at = prev.resolved_at;
   await set(ref(database, path), merged);
-  return merged;
+  return merged as ActiveAlertRecord;
 };
 
 export const dismissActiveAlert = async (
@@ -1043,15 +1044,19 @@ export const dismissActiveAlert = async (
 ) => {
   const path = activeAlertPath(fingerprint);
   const now = Date.now();
-  await set(ref(database, path), {
-    ...(await (async () => {
-      const s = await get(ref(database, path));
-      return s.exists() ? s.val() : {};
-    })()),
+  const s = await get(ref(database, path));
+  const prev = s.exists() ? (s.val() as any) : {};
+  const next: any = {
+    ...prev,
     dismissed: true,
     dismiss_reason: reason,
-    resolved_at: reason === 'resolved' ? now : undefined,
-  });
+  };
+  if (reason === 'resolved') {
+    next.resolved_at = now;
+  } else if ('resolved_at' in next) {
+    delete next.resolved_at; // ensure we do not write undefined
+  }
+  await set(ref(database, path), next);
   // audit log
   const msg =
     context?.message ?? (reason === 'expired' ? 'Auto-dismiss after 10 minutes' : reason === 'manual' ? 'Manual dismissal' : 'Resolved before expiry');

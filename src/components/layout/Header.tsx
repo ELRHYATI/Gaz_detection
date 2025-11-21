@@ -37,6 +37,24 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     return () => unsub()
   }, [])
 
+  // Listen for cross-page notifications changes for immediate badge updates
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null
+    try {
+      channel = new BroadcastChannel('alerts')
+      channel.onmessage = (ev) => {
+        const data = ev?.data
+        if (!data || typeof data !== 'object') return
+        if (data.type === 'deleted' && data.id) {
+          setNotifications((prev) => prev.filter((n) => n.id !== data.id))
+        } else if (data.type === 'acknowledged' && data.id) {
+          setNotifications((prev) => prev.map((n) => n.id === data.id ? { ...n, acknowledged: true } : n))
+        }
+      }
+    } catch {}
+    return () => { try { channel?.close() } catch {} }
+  }, [])
+
   const badgeCount = notifications.filter(n => !n.acknowledged).length
 
   const timeAgo = (ts?: number) => {

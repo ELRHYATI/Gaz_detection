@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { AlertLevel } from '../../types';
 import { getAlertIcon } from '../../utils/alerts';
-import { setActuatorStates } from '../../utils/firebase';
+import { setActuatorStates, appendAlertLog } from '../../utils/firebase';
 import { APP_CONFIG } from '../../config/app';
 import { FiPhoneCall, FiMail, FiMessageSquare } from 'react-icons/fi';
 
@@ -45,11 +45,57 @@ const AlertBanner: React.FC<AlertBannerProps> = ({ level, message, onDismiss, ex
   };
 
   const [contactOpen, setContactOpen] = useState(false);
+  const [showConfirmEvac, setShowConfirmEvac] = useState(false);
+  const [evacCountdown, setEvacCountdown] = useState<number>(5);
+  const [evacLoading, setEvacLoading] = useState<boolean>(false);
+  const [evacError, setEvacError] = useState<string | null>(null);
   const phoneDigits = String((APP_CONFIG as any).emergency?.phone || '112').replace(/\D/g, '');
   const whatsappUrl = `https://wa.me/${phoneDigits}`;
   const smsUrl = `sms:${phoneDigits}?body=${encodeURIComponent('Urgence gaz - assistance requise')}`;
   const mailAddr = (APP_CONFIG as any).emergency?.email || '';
   const mailUrl = mailAddr ? `mailto:${mailAddr}?subject=${encodeURIComponent('Urgence gaz - assistance requise')}&body=${encodeURIComponent('Alerte critique détectée. Veuillez intervenir immédiatement.')}` : '';
+
+  useEffect(() => {
+    if (!showConfirmEvac) return;
+    setEvacCountdown(5);
+    setEvacError(null);
+    const iv = setInterval(() => {
+      setEvacCountdown((c) => {
+        if (c <= 1) {
+          clearInterval(iv);
+          // Auto-trigger evacuation when countdown hits 0
+          triggerEvacuation();
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(iv);
+  }, [showConfirmEvac]);
+
+  const triggerEvacuation = async () => {
+    if (evacLoading) return; // prevent double-clicks
+    setEvacLoading(true);
+    setEvacError(null);
+    try {
+      await setActuatorStates({ LED_rouge: 'ON', LED_verte: 'OFF', buzzer: 'ON', fenetres: 'OUVERT' }, 'emergency');
+      // Log structured alert entry
+      await appendAlertLog({
+        timestamp: Date.now(),
+        severity: 'critical',
+        parameter: 'gas',
+        value: 0,
+        message: 'Évacuation déclenchée (ouverture des fenêtres, buzzer ON, LED rouge ON)'
+      });
+      setShowConfirmEvac(false);
+      setContactOpen(true); // surface contact options right after triggering
+    } catch (e: any) {
+      console.error('Evacuation command failed', e);
+      setEvacError(e?.message || 'Échec du déclenchement. Réessayez.');
+    } finally {
+      setEvacLoading(false);
+    }
+  };
 
   return (
     <div className={`rounded-lg border p-4 ${getBannerClasses(level.level)}`}>
@@ -82,17 +128,43 @@ const AlertBanner: React.FC<AlertBannerProps> = ({ level, message, onDismiss, ex
         <div className="mt-4 flex space-x-3">
           <button
             className="btn-danger text-sm"
-            onClick={async () => {
-              try {
-                await setActuatorStates({ LED_rouge: 'ON', LED_verte: 'OFF', buzzer: 'ON', fenetres: 'OUVERT' }, 'emergency');
-              } catch (e) {
-                console.error('Evacuation command failed', e);
-              }
-            }}
+            disabled={evacLoading}
+            onClick={() => setShowConfirmEvac(true)}
           >
-            Évacuation d'urgence
+            {evacLoading ? 'Déclenchement…' : "Évacuation d'urgence"}
           </button>
           <button className="btn-secondary text-sm" onClick={() => setContactOpen(true)}>Contacter les secours</button>
+        </div>
+      )}
+
+      {/* Confirmation modal for evacuation */}
+      {showConfirmEvac && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white dark:bg-gray-900 w-full max-w-md rounded-lg shadow-lg border border-gray-200 dark:border-gray-700">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+              <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Confirmer l’évacuation</h4>
+            </div>
+            <div className="p-4 space-y-3 text-sm text-gray-700 dark:text-gray-300">
+              <p>Cette action va :</p>
+              <ul className="list-disc ml-5">
+                <li>Ouvrir les fenêtres</li>
+                <li>Activer le buzzer (alarme)</li>
+                <li>Allumer la LED rouge et éteindre la LED verte</li>
+              </ul>
+              <div className="mt-2">
+                Déclenchement automatique dans <span className="font-semibold">{evacCountdown}s</span>…
+              </div>
+              {evacError && (
+                <div className="mt-2 text-red-600 dark:text-red-400">{evacError}</div>
+              )}
+            </div>
+            <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+              <button className="btn-secondary text-sm" onClick={() => setShowConfirmEvac(false)} disabled={evacLoading}>Annuler</button>
+              <button className="btn-danger text-sm" onClick={triggerEvacuation} disabled={evacLoading}>
+                {evacLoading ? 'Déclenchement…' : 'Déclencher maintenant'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

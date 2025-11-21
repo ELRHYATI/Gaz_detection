@@ -4,6 +4,7 @@ import { getMessaging, isSupported } from 'firebase/messaging';
 import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import { getDatabase, connectDatabaseEmulator } from 'firebase/database';
 import { getAnalytics, isSupported as isAnalyticsSupported, logEvent } from 'firebase/analytics';
+import { getPerformance } from 'firebase/performance';
 
 // Firebase configuration
 // Replace these values with your actual Firebase project configuration
@@ -73,6 +74,14 @@ export function logAuthEventSafe(eventName: string, params?: Record<string, unkn
   } catch {
     // ignore analytics errors in web envs without full support
   }
+}
+
+// Performance Monitoring: optional instance
+export let performance: ReturnType<typeof getPerformance> | undefined;
+try {
+  performance = getPerformance(app);
+} catch {
+  performance = undefined;
 }
 
 export default app;

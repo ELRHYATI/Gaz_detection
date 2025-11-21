@@ -42,11 +42,32 @@ export const startInactivityMonitor = (opts?: InactivityMonitorOptions) => {
     }
   };
 
+  // Normalize timestamps to milliseconds since epoch
+  const normalizeTimestamp = (value: unknown): number => {
+    if (value == null) return Date.now();
+    if (typeof value === 'number') {
+      const n = value;
+      // Heuristic: values less than 1e10 are likely seconds
+      if (n > 0 && n < 1e10) return n * 1000;
+      return n;
+    }
+    if (typeof value === 'string') {
+      const asNum = Number(value);
+      if (Number.isFinite(asNum)) return normalizeTimestamp(asNum);
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : Date.now();
+    }
+    return Date.now();
+  };
+
+  const EARLIEST_VALID_MS = Date.UTC(2000, 0, 1);
+
   const handleLatest = (snap: any) => {
     const val = snap?.val?.();
     if (!val) return;
     const ok = verifyIntegrity ? isValidGasPayload(val) : true;
-    const ts = Number(val?.timestamp ?? val?.time ?? val?.ts ?? Date.now());
+    let ts = normalizeTimestamp(val?.timestamp ?? val?.time ?? val?.ts ?? Date.now());
+    if (ts < EARLIEST_VALID_MS) ts = Date.now();
     if (ok) {
       lastValidTs = ts;
       if (currentStatus === 'inactive') {
@@ -59,10 +80,11 @@ export const startInactivityMonitor = (opts?: InactivityMonitorOptions) => {
     const s = snap?.val?.();
     if (!s || typeof s !== 'object') return;
     const mq2Node = (s as any).MQ2 ?? (s as any).mq2;
-    const ts = (s as any).timestamp ?? (s as any).time ?? (s as any).ts;
+    let ts = normalizeTimestamp((s as any).timestamp ?? (s as any).time ?? (s as any).ts);
     const g = typeof mq2Node === 'object' && mq2Node !== null ? (mq2Node.concentration ?? mq2Node.value ?? mq2Node.level) : mq2Node;
     const ok = verifyIntegrity ? isFiniteNumber(Number(g)) && isFiniteNumber(Number(ts)) : true;
     if (ok) {
+      if (ts < EARLIEST_VALID_MS) ts = Date.now();
       lastValidTs = Number(ts);
       if (currentStatus === 'inactive') {
         trySetStatus('active', 'valid_capteurs');
@@ -94,10 +116,17 @@ export const startInactivityMonitor = (opts?: InactivityMonitorOptions) => {
       const sensorsSnap = await get(sensorsRef);
       const candidates: number[] = [];
       const l = latestSnap?.val?.();
-      if (l && isValidGasPayload(l)) candidates.push(Number(l.timestamp ?? l.time ?? l.ts));
+      if (l && isValidGasPayload(l)) {
+        let ts = normalizeTimestamp(l.timestamp ?? l.time ?? l.ts);
+        if (ts < EARLIEST_VALID_MS) ts = Date.now();
+        candidates.push(Number(ts));
+      }
       const s = sensorsSnap?.val?.();
-      const ts = s?.timestamp ?? s?.time ?? s?.ts;
-      if (isFiniteNumber(Number(ts))) candidates.push(Number(ts));
+      let ts = normalizeTimestamp(s?.timestamp ?? s?.time ?? s?.ts);
+      if (isFiniteNumber(Number(ts))) {
+        if (ts < EARLIEST_VALID_MS) ts = Date.now();
+        candidates.push(Number(ts));
+      }
       if (candidates.length) lastValidTs = Math.max(...candidates);
     } catch (e) {
       console.warn('Inactivity priming failed; using Date.now()', e);
