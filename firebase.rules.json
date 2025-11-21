@@ -44,10 +44,12 @@
       ".validate": "newData.hasOnly(['OcRfhriO1eH19IBo5lM','OcRhG9I-a0XTq87JZCH','OcRj7WStg5MODXnhmOe','OcRjLQ6MoBDho76dg8z','OcRjMzsxjnUId4Yggbk','OcRs8IhKMHRelyXmVSQ','OcaVDEFF1x7d5OVD4xq','OcaVzsglR5v0aOPVP5z','OcaW9GmJD6RzVYwMwAJ'])"
     },
     "capteurs": {
+      ".read": "true",  
       ".write": "auth != null && (auth.token.device == true || auth.token.role == 'admin')",
       ".validate": "newData.child('MQ2').isNumber() && newData.child('timestamp').isNumber()"
     },
     "latestReading": {
+      ".read": "true",  
       ".write": "auth != null && (auth.token.device == true || auth.token.role == 'admin')",
       ".validate": "newData.hasChildren(['gasLevel','humidity','temperature','timestamp']) && newData.child('gasLevel').isNumber() && newData.child('humidity').isNumber() && newData.child('temperature').isNumber() && newData.child('timestamp').isNumber()"
     },

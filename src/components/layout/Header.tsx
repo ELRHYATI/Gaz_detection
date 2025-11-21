@@ -49,6 +49,8 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           setNotifications((prev) => prev.filter((n) => n.id !== data.id))
         } else if (data.type === 'acknowledged' && data.id) {
           setNotifications((prev) => prev.map((n) => n.id === data.id ? { ...n, acknowledged: true } : n))
+        } else if (data.type === 'deleted_all') {
+          setNotifications([])
         }
       }
     } catch {}

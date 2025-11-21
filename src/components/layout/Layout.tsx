@@ -7,6 +7,7 @@ import useManualControlSync from '../../hooks/useManualControlSync'
 import startInactivityMonitor from '../../workers/inactivityMonitor'
 import PageTransition from '../common/PageTransition'
 import AlertBanner from '../common/AlertBanner'
+import FlashToast from '../common/FlashToast'
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -51,6 +52,8 @@ const Layout: React.FC = () => {
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
             {/* Prominent notifications banner */}
             <AlertBanner />
+            {/* One-time success toast after login */}
+            <FlashToast />
             <Breadcrumbs />
             <PageTransition>
               <Outlet />

@@ -199,7 +199,7 @@ const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="text-center p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
             <div className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              {thresholds?.gasMax || 200}
+              {thresholds?.gasMax || 900}
             </div>
             <div className="text-sm text-gray-600 dark:text-gray-400">Gas max threshold (ppm)</div>
           </div>

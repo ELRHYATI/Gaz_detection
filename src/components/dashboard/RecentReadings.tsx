@@ -11,7 +11,7 @@ interface RecentReadingsProps {
 const fallbackThreshold: Threshold = {
   id: 'current',
   gasMin: 0,
-  gasMax: 200,
+  gasMax: 900,
   humidityMin: 20,
   humidityMax: 80,
   temperatureMin: 0,

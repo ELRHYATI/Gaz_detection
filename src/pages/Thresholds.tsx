@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const defaultThreshold: Omit<Threshold, 'id' | 'updatedAt' | 'updatedBy'> = {
   gasMin: 0,
-  gasMax: 200,
+  gasMax: 900,
   humidityMin: 20,
   humidityMax: 80,
   temperatureMin: 0,
@@ -24,6 +24,11 @@ const Thresholds: React.FC = () => {
     }
   });
 
+  // Track initial load and last-saved values to avoid unnecessary writes
+  const initialLoadRef = React.useRef(true);
+  const debounceRef = React.useRef<number | null>(null);
+  const lastSavedRef = React.useRef<{ gasMin: number; gasMax: number; humidityMin: number; humidityMax: number; temperatureMin: number; temperatureMax: number } | null>(null);
+
   React.useEffect(() => {
     const unsubscribe = subscribeToThreshold((thr) => {
       if (thr) {
@@ -33,6 +38,18 @@ const Thresholds: React.FC = () => {
         setValue('humidityMax', thr.humidityMax);
         setValue('temperatureMin', thr.temperatureMin);
         setValue('temperatureMax', thr.temperatureMax);
+        // Seed lastSaved with the loaded values to prevent redundant auto-save
+        lastSavedRef.current = {
+          gasMin: thr.gasMin,
+          gasMax: thr.gasMax,
+          humidityMin: thr.humidityMin,
+          humidityMax: thr.humidityMax,
+          temperatureMin: thr.temperatureMin,
+          temperatureMax: thr.temperatureMax,
+        };
+        // Only mark initial load complete once we have existing data,
+        // preventing default values from being auto-saved on refresh/login.
+        initialLoadRef.current = false;
       }
     });
     return () => unsubscribe();
@@ -63,7 +80,7 @@ const Thresholds: React.FC = () => {
 
   // Slider domains
   const GAS_MIN_DOMAIN = 0;
-  const GAS_MAX_DOMAIN = 400;
+  const GAS_MAX_DOMAIN = 1023;
   const HUM_MIN_DOMAIN = 0;
   const HUM_MAX_DOMAIN = 100;
   const TEMP_MIN_DOMAIN = -20;
@@ -91,6 +108,65 @@ const Thresholds: React.FC = () => {
     setValue('temperatureMin', defaultThreshold.temperatureMin);
     setValue('temperatureMax', defaultThreshold.temperatureMax);
   };
+
+  // Auto-save thresholds whenever user adjusts values (debounced)
+  React.useEffect(() => {
+    // Skip while initial values are loading
+    if (initialLoadRef.current) return;
+
+    // If we haven't loaded previously saved values, avoid auto-saving defaults.
+    if (!lastSavedRef.current) return;
+
+    // Validate ordering
+    const validGas = typeof gasMin === 'number' && typeof gasMax === 'number' && gasMax > gasMin;
+    const validHum = typeof humidityMin === 'number' && typeof humidityMax === 'number' && humidityMax > humidityMin;
+    const validTemp = typeof temperatureMin === 'number' && typeof temperatureMax === 'number' && temperatureMax > temperatureMin;
+    if (!validGas || !validHum || !validTemp) return;
+
+    const pending = {
+      gasMin: Number(gasMin),
+      gasMax: Number(gasMax),
+      humidityMin: Number(humidityMin),
+      humidityMax: Number(humidityMax),
+      temperatureMin: Number(temperatureMin),
+      temperatureMax: Number(temperatureMax),
+    };
+
+    // Avoid saving when values haven't changed
+    const last = lastSavedRef.current;
+    const unchanged = last &&
+      last.gasMin === pending.gasMin &&
+      last.gasMax === pending.gasMax &&
+      last.humidityMin === pending.humidityMin &&
+      last.humidityMax === pending.humidityMax &&
+      last.temperatureMin === pending.temperatureMin &&
+      last.temperatureMax === pending.temperatureMax;
+    if (unchanged) return;
+
+    // Debounce to prevent excessive writes while sliding
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        await saveThreshold({
+          ...pending,
+          updatedAt: Date.now(),
+          updatedBy: currentUser?.email || 'system',
+        });
+        lastSavedRef.current = pending;
+      } catch (e) {
+        console.error('Auto-save thresholds failed:', e);
+      }
+    }, 500);
+
+    // Cleanup timer on dependency changes/unmount
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [gasMin, gasMax, humidityMin, humidityMax, temperatureMin, temperatureMax, currentUser]);
 
   return (
     <div className="space-y-6">

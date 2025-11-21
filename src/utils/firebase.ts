@@ -166,10 +166,49 @@ export const getHistoricalReadings = async (limit: number = 100): Promise<GasRea
     
     if (snapshot.exists()) {
       const data = snapshot.val();
-      const values = Object.values(data) as GasReading[];
-      return values
+      const rawValues = Object.values(data) as any[];
+
+      // Normalize heterogeneous schemas into GasReading shape
+      const toNumber = (v: unknown, fallback: number = 0) => {
+        if (typeof v === 'number') return v;
+        const n = Number(v as any);
+        return Number.isFinite(n) ? n : fallback;
+      };
+
+      const normalizeOne = (r: any): GasReading | null => {
+        if (!r || typeof r !== 'object') return null;
+        // gas level variants
+        const gasCandidates = [
+          r.gasLevel, r.gas, r.gaz, r.MQ2, r.mq2,
+          r?.mq2?.value, r?.mq2?.level, r?.mq2?.concentration,
+          r?.MQ2?.value, r?.MQ2?.level, r?.MQ2?.concentration,
+        ];
+        const gasLevel = toNumber(gasCandidates.find((x: any) => Number.isFinite(toNumber(x, NaN))), 0);
+
+        // timestamp variants
+        const tsCandidates = [r.timestamp, r.time, r.ts, r.date];
+        let timestamp = toNumber(tsCandidates.find((x: any) => Number.isFinite(toNumber(x, NaN))), Date.now());
+        // Allow seconds; History page will render millis, but sorting should use millis for consistency
+        if (timestamp < 1e12) timestamp = timestamp * 1000;
+
+        // humidity / temperature variants
+        const humidity = toNumber(r.humidity ?? r.humidite ?? r.hum);
+        const temperature = toNumber(r.temperature ?? r.temp ?? r.temperatur);
+
+        const id = (r.id as string) || (r.key as string) || String(timestamp);
+        const location = r.location as string | undefined;
+
+        if (!Number.isFinite(gasLevel) || !Number.isFinite(timestamp)) return null;
+        return { id, gasLevel, humidity, temperature, timestamp, location };
+      };
+
+      const normalized = rawValues
+        .map(normalizeOne)
+        .filter((x: GasReading | null): x is GasReading => !!x)
         .sort((a, b) => b.timestamp - a.timestamp)
         .slice(0, limit);
+
+      return normalized;
     }
     return [];
   } catch (error) {
@@ -955,6 +994,34 @@ export const appendAlertLog = async (entry: AlertLogEntry) => {
   return record.id as string;
 };
 
+// Append an alert log only if not recently logged for the same fingerprint.
+// Fingerprint format suggestion: `${parameter}:${severity}`
+export const appendAlertLogRateLimited = async (
+  fingerprint: string,
+  entry: AlertLogEntry,
+  windowMs: number = 10 * 60 * 1000 // default 10 minutes
+): Promise<string | null> => {
+  try {
+    const idxRef = ref(database, `alerts_index/${fingerprint}/last_logged_at`);
+    const snap = await get(idxRef);
+    const last = snap.exists() && typeof snap.val() === 'number' ? (snap.val() as number) : 0;
+    const now = Date.now();
+    if (now - last < windowMs) {
+      return null; // within window: skip duplicate
+    }
+    const id = await appendAlertLog(entry);
+    await set(idxRef, now);
+    return id;
+  } catch (e) {
+    // On any error, fall back to appending to avoid missing critical logs
+    try {
+      return await appendAlertLog(entry);
+    } catch {
+      return null;
+    }
+  }
+};
+
 export const acknowledgeAlertLog = async (id: string) => {
   const logRef = ref(database, `alerts_logs/${id}/acknowledged`);
   await set(logRef, true);
@@ -963,6 +1030,19 @@ export const acknowledgeAlertLog = async (id: string) => {
 export const deleteAlertLog = async (id: string) => {
   const logRef = ref(database, `alerts_logs/${id}`);
   await remove(logRef);
+};
+
+// Delete all alert logs at once
+export const deleteAllAlertLogs = async (): Promise<void> => {
+  const logsRoot = ref(database, 'alerts_logs');
+  await remove(logsRoot);
+};
+
+// Restore a previously deleted alert log (used for undo)
+export const restoreAlertLog = async (entry: AlertLogEntry): Promise<void> => {
+  if (!entry?.id) return;
+  const logRef = ref(database, `alerts_logs/${entry.id}`);
+  await set(logRef, entry);
 };
 
 // Subscribe to structured alert logs under 'alerts_logs'

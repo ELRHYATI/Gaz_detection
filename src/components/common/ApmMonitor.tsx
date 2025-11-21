@@ -25,7 +25,7 @@ const ApmMonitor: React.FC<Props> = ({ compact }) => {
         <span className={`font-medium ${scoreColor('LCP', lcp)}`}>LCP: {lcp ?? '—'}ms</span>
         <span className={`font-medium ${scoreColor('FCP', fcp)}`}>FCP: {fcp ?? '—'}ms</span>
         <span className={`font-medium ${scoreColor('FID', fid)}`}>FID: {fid ?? '—'}ms</span>
-        <span className={`font-medium ${scoreColor('CLS', cls)}`}>CLS: {(cls ?? NaN).toFixed ? (cls as number).toFixed(3) : '—'}</span>
+        <span className={`font-medium ${scoreColor('CLS', cls)}`}>CLS: {typeof cls === 'number' ? cls.toFixed(3) : '—'}</span>
         {updatedAt && (
           <span className="text-gray-400">· {new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(updatedAt))}</span>
         )}
@@ -40,7 +40,7 @@ const ApmMonitor: React.FC<Props> = ({ compact }) => {
         <div className={scoreColor('LCP', lcp)}>LCP: {lcp ?? '—'}ms</div>
         <div className={scoreColor('FCP', fcp)}>FCP: {fcp ?? '—'}ms</div>
         <div className={scoreColor('FID', fid)}>FID: {fid ?? '—'}ms</div>
-        <div className={scoreColor('CLS', cls)}>CLS: {(cls ?? NaN).toFixed ? (cls as number).toFixed(3) : '—'}</div>
+        <div className={scoreColor('CLS', cls)}>CLS: {typeof cls === 'number' ? cls.toFixed(3) : '—'}</div>
       </div>
       {updatedAt && (
         <div className="text-xs text-gray-500 mt-2">Updated {new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(updatedAt))}</div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { calculateAlertLevel } from '../utils/alerts';
-import { subscribeToThreshold, appendAlertLog, acknowledgeAlertLog, upsertActiveAlert, dismissActiveAlert } from '../utils/firebase';
+import { subscribeToThreshold, appendAlertLogRateLimited, acknowledgeAlertLog, upsertActiveAlert, dismissActiveAlert } from '../utils/firebase';
 import { useLatestReadingRealtime } from './useLatestReadingRealtime';
 import type { GasReading, Threshold } from '../types';
 import { APP_CONFIG } from '../config/app';
@@ -67,28 +67,17 @@ export const useAlertsEngine = () => {
     if (level.level === 'safe') return null;
 
     // Determine which parameter is at fault with priority: critical gas > any exceeding
-    const { gasLevel, humidity, temperature } = reading;
-    const paramExceeds: Array<{ p: Param; val: number; sev: Severity }> = [];
-
-    // Gas
-    if (gasLevel > t.gasMax * 1.5) paramExceeds.push({ p: 'gas', val: gasLevel, sev: 'critical' });
-    else if (gasLevel > t.gasMax || gasLevel < t.gasMin) paramExceeds.push({ p: 'gas', val: gasLevel, sev: 'danger' });
-    // Humidity
-    if (humidity > t.humidityMax || humidity < t.humidityMin) paramExceeds.push({ p: 'humidity', val: humidity, sev: 'danger' });
-    // Temperature
-    if (temperature > t.temperatureMax || temperature < t.temperatureMin) paramExceeds.push({ p: 'temperature', val: temperature, sev: 'danger' });
-
-    let chosen = paramExceeds[0];
-    // prioritize most severe
-    if (paramExceeds.length > 1) {
-      chosen = paramExceeds.reduce((acc, cur) => {
-        const rank = (s: Severity) => (s === 'critical' ? 3 : s === 'danger' ? 2 : 1);
-        return rank(cur.sev) > rank(acc.sev) ? cur : acc;
-      });
+    const { gasLevel } = reading;
+    // Only evaluate GAS parameter; ignore humidity and temperature notifications entirely
+    let severity: Severity;
+    if (gasLevel > t.gasMax * 1.5) severity = 'critical';
+    else if (gasLevel > t.gasMax || gasLevel < t.gasMin) severity = 'danger';
+    else {
+      // If overall level isn't safe but gas is fine, ignore (no alert)
+      return null;
     }
-    const severity: Severity = chosen?.sev || (level.level as Severity);
-    const parameter: Param = chosen?.p || 'gas';
-    const value = chosen?.val ?? gasLevel;
+    const parameter: Param = 'gas';
+    const value = gasLevel;
     const ts = reading.timestamp;
     const loc = reading.location || APP_CONFIG.locationLabel;
     const message = level.message;
@@ -144,8 +133,9 @@ export const useAlertsEngine = () => {
           if (APP_CONFIG.alerts.enableVibration && 'vibrate' in navigator) {
             try { navigator.vibrate(vibratePattern(alert.severity)); } catch {}
           }
-          // log initial occurrence
-          void appendAlertLog({
+          // log initial occurrence with rate limiting to reduce duplicates
+          const fpWindowMs = alert.severity === 'critical' ? 3 * 60 * 1000 : 10 * 60 * 1000; // 3min for critical, 10min for danger
+          void appendAlertLogRateLimited(fp, {
             timestamp: alert.timestamp,
             severity: alert.severity,
             parameter: alert.parameter,
@@ -161,7 +151,7 @@ export const useAlertsEngine = () => {
             location: alert.location,
             message: alert.message,
             acknowledged: false,
-          });
+          }, fpWindowMs);
 
           // Server-side notifications are enabled; avoid duplicate client sends.
         }

@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { FiMail, FiLock, FiAlertCircle, FiCheckCircle } from 'react-icons/fi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { createSafeStorage, safeJSONStringify } from '../../utils/storage';
 
 interface LoginFormData {
   email: string;
@@ -37,6 +38,11 @@ const Login: React.FC = () => {
     setError('');
     try {
       await login(data.email, data.password, data.remember);
+      // Set flash toast payload for next page
+      try {
+        const storage = createSafeStorage('local', 'app:');
+        storage.set('flash_login_success', safeJSONStringify({ type: 'success', message: 'Login successful', ts: Date.now() }));
+      } catch { /* ignore storage errors */ }
       const target = location.state?.from?.pathname || '/dashboard';
       // Play success transition before redirect
       const durationMs = prefersReduced ? 0 : 1000; // 800–1200ms range

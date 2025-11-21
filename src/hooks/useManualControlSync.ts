@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { subscribeToManualServo, subscribeToManualSeuil, subscribeToManualSeuilGaz, setServoAngle, applyManualGasThreshold, writeActuatorLog } from '../utils/firebase';
+import { subscribeToManualServo, subscribeToManualSeuil, subscribeToManualSeuilGaz, setServoAngle, applyManualGasThreshold, writeActuatorLog, subscribeToWindowControl } from '../utils/firebase';
 import type { ManualServoParams, ManualThresholdParams } from '../utils/firebase';
 
 // Smooth movement config
@@ -13,12 +13,21 @@ const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min)
 export function useManualControlSync() {
   const movingTimer = useRef<number | null>(null);
   const lastTarget = useRef<number>(0);
+  const manualOverride = useRef<boolean>(false);
 
   useEffect(() => {
+    // Track manual override flag from window control; only apply manual thresholds when enabled
+    const unsubWindow = subscribeToWindowControl((ctrl) => {
+      manualOverride.current = !!ctrl?.manual_override;
+    }, (err) => {
+      console.error('[manual-sync] window_control subscribe error', err);
+    });
+
     // Subscribe to threshold/seuil changes
     const unsubSeuil = subscribeToManualSeuil(async (params: ManualThresholdParams | null) => {
       const v = params?.seuil_gaz;
       if (typeof v === 'undefined' || v === null) return;
+      if (!manualOverride.current) return; // respect manual override flag
       await applyManualGasThreshold(v);
     }, (err) => {
       console.error('[manual-sync] seuil subscribe error', err);
@@ -28,6 +37,7 @@ export function useManualControlSync() {
     // Subscribe to leaf value '.../seuil_gaz'
     const unsubSeuilGaz = subscribeToManualSeuilGaz(async (val) => {
       if (val === null || typeof val === 'undefined') return;
+      if (!manualOverride.current) return; // respect manual override flag
       await applyManualGasThreshold(val);
     }, (err) => {
       console.error('[manual-sync] seuil_gaz subscribe error', err);
@@ -49,7 +59,9 @@ export function useManualControlSync() {
       scheduleSmoothMove(target);
       // Optional: if seuil_gaz present here, apply too
       if (typeof params.seuil_gaz !== 'undefined' && params.seuil_gaz !== null) {
-        await applyManualGasThreshold(params.seuil_gaz);
+        if (manualOverride.current) {
+          await applyManualGasThreshold(params.seuil_gaz);
+        }
       }
     }, (err) => {
       console.error('[manual-sync] servo subscribe error', err);
@@ -57,6 +69,7 @@ export function useManualControlSync() {
     });
 
     return () => {
+      unsubWindow();
       unsubSeuil();
       unsubServo();
       unsubSeuilGaz();

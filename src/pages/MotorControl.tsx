@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FiToggleLeft, FiCheck, FiX, FiRotateCcw } from 'react-icons/fi';
-import { subscribeToMotorStatus, subscribeToMotorState, subscribeToWindowControl, subscribeToActionneursFenetre, setActionneursFenetre } from '../utils/firebase';
+import { subscribeToMotorStatus, subscribeToMotorState, subscribeToWindowControl, subscribeToActionneursFenetre, setActionneursFenetre, setMotorStatus, setWindowControlState } from '../utils/firebase';
 import type { MotorStatus } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -8,15 +8,31 @@ const MotorControl: React.FC = () => {
   const { currentUser } = useAuth();
   // commanded status not used in UI; track last update/actor only
   const [actual, setActual] = useState<MotorStatus | null>(null);
+  const [status, setStatus] = useState<MotorStatus | null>(null);
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
   const [updatedBy, setUpdatedBy] = useState<string | null>(null);
   const [wc, setWc] = useState<{ current_state: 'open'|'closed'; servo_position: number; last_updated: number; manual_override: boolean } | null>(null);
   const [fenetresAct, setFenetresAct] = useState<'FERME' | 'OUVERT' | null>(null);
   const [fenetresError, setFenetresError] = useState<string | null>(null);
   const [statusPulse, setStatusPulse] = useState(false);
+  const [animating, setAnimating] = useState(false);
+  const [armAngle, setArmAngle] = useState<number>(0);
+  // Progress arc dash length for smooth visual feedback
+  const CIRCUMFERENCE = 2 * Math.PI * 80; // r=80 circle
+  const [arcDash, setArcDash] = useState<number>(0);
+
+  // Derived preview state for UI consistency
+  const previewState: MotorStatus | null = useMemo(() => {
+    if (wc?.current_state) return wc.current_state;
+    if (actual) return actual;
+    if (status) return status;
+    if (fenetresAct) return fenetresAct === 'OUVERT' ? 'open' : 'closed';
+    return null;
+  }, [wc?.current_state, actual, status, fenetresAct]);
 
   useEffect(() => {
-    const u1 = subscribeToMotorStatus((_status) => {
+    const u1 = subscribeToMotorStatus((cmdStatus) => {
+      setStatus(cmdStatus);
       setLastUpdated(Date.now());
       setUpdatedBy(currentUser?.email || 'system');
     });
@@ -40,6 +56,43 @@ const MotorControl: React.FC = () => {
       return () => clearTimeout(t);
     }
   }, [fenetresAct]);
+
+  // Pulse on motor status/state changes as well for better feedback
+  useEffect(() => {
+    if (status !== null || actual !== null) {
+      setStatusPulse(true);
+      const t = setTimeout(() => setStatusPulse(false), 400);
+      return () => clearTimeout(t);
+    }
+  }, [status, actual]);
+
+  // Animate the servo arm whenever we get a change from any source
+  // Priority: window_control.servo_position -> motor/state -> motor/status -> actionneurs/fenetres
+  useEffect(() => {
+    // Helper: clamp angle to a safe visual range (0-70deg to avoid overshoot)
+    const clampAngle = (deg: number) => Math.max(0, Math.min(70, deg));
+
+    let nextAngle = armAngle;
+    if (typeof wc?.servo_position === 'number') {
+      // Use reported servo position directly; clamp for visualization
+      nextAngle = clampAngle(wc.servo_position);
+    } else if (actual) {
+      nextAngle = actual === 'open' ? 50 : 0;
+    } else if (status) {
+      nextAngle = status === 'open' ? 50 : 0;
+    } else if (fenetresAct) {
+      nextAngle = fenetresAct === 'OUVERT' ? 50 : 0;
+    }
+
+    // Only trigger animation when angle actually changes
+    if (nextAngle !== armAngle) {
+      setAnimating(true);
+      setArmAngle(nextAngle);
+      setArcDash(CIRCUMFERENCE * (nextAngle / 70));
+      const t = setTimeout(() => setAnimating(false), 650);
+      return () => clearTimeout(t);
+    }
+  }, [wc?.servo_position, actual, status, fenetresAct]);
 
   // Manual motor control is handled via actionneurs/fenetres for this UI variant
 
@@ -68,29 +121,50 @@ const MotorControl: React.FC = () => {
             </div>
           </div>
           <div className="p-6">
-              <div className="relative mx-auto w-64 h-64 rounded-full flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700">
+              <div className="relative mx-auto w-72 h-72 rounded-2xl flex items-center justify-center bg-gradient-to-br from-white to-gray-100 dark:from-gray-800 dark:to-gray-900 border border-gray-200 dark:border-gray-700 shadow-sm">
               {/* Glow ring */}
-              <div className={`absolute inset-0 rounded-full ${actual === 'open' ? 'ring-4 ring-emerald-400/50' : 'ring-4 ring-rose-400/50'}`} />
+              <div className={`absolute inset-0 rounded-full ring-4 ${previewState === 'open' ? 'ring-emerald-400/40' : 'ring-rose-400/40'} ${animating ? 'animate-pulse' : ''}`} />
               {/* Gate preview */}
-              <svg width="200" height="200" viewBox="0 0 200 200" className="relative">
-                <circle cx="100" cy="100" r="90" fill="none" stroke="currentColor" className="text-gray-200 dark:text-gray-700" strokeWidth="2" />
+              <svg width="220" height="220" viewBox="0 0 200 200" className="relative">
+                {/* Track circle */}
+                <circle cx="100" cy="100" r="80" fill="none" stroke="currentColor" className="text-gray-200 dark:text-gray-700" strokeWidth="10" strokeLinecap="round" />
+                {/* Progress arc */}
+                <circle
+                  cx="100" cy="100" r="80" fill="none"
+                  stroke={previewState === 'open' ? '#10b981' : '#f43f5e'}
+                  strokeWidth="10" strokeLinecap="round"
+                  style={{
+                    strokeDasharray: `${Math.max(0, Math.min(CIRCUMFERENCE, arcDash))} ${CIRCUMFERENCE}`,
+                    transition: 'stroke-dasharray 650ms cubic-bezier(0.22,1,0.36,1)',
+                  }}
+                />
                 {/* Pivot */}
                 <circle cx="100" cy="100" r="6" fill="currentColor" className="text-gray-500 dark:text-gray-300" />
-                {/* Arm: rotates when open */}
-                <g transform={`rotate(${actual === 'open' ? 50 : 0} 100 100)`}>
-                  <rect x="100" y="95" width="70" height="10" fill="currentColor" className={actual === 'open' ? 'text-emerald-500' : 'text-rose-500'} rx="5" />
+                {/* Arm: rotates with smooth transition based on state/position */}
+                <g style={{
+                  transform: `rotate(${armAngle}deg)`,
+                  transformOrigin: '100px 100px',
+                  transition: 'transform 700ms cubic-bezier(0.22, 1, 0.36, 1)',
+                  willChange: 'transform',
+                }}>
+                  {/* Arm shadow */}
+                  <rect x="100" y="94" width="72" height="12" fill="currentColor" className="text-gray-300/40 dark:text-gray-700/40" rx="6" />
+                  {/* Arm */}
+                  <rect x="100" y="95" width="70" height="10" fill="currentColor" className={previewState === 'open' ? 'text-emerald-500' : 'text-rose-500'} rx="5" />
+                  {/* Tip */}
+                  <circle cx="170" cy="100" r="5" fill={previewState === 'open' ? '#10b981' : '#f43f5e'} />
                 </g>
                 {/* Gate panel */}
-                <rect x="25" y="60" width="30" height="80" fill="currentColor" className="text-gray-300 dark:text-gray-600" rx="6" />
+                <rect x="20" y="60" width="34" height="80" fill="currentColor" className="text-gray-300 dark:text-gray-600" rx="8" />
               </svg>
               <div className="absolute bottom-4 left-0 right-0 text-center">
                 <div className="text-sm text-gray-600 dark:text-gray-400">État actuel</div>
-                <div className={`mt-1 inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium ${
-                  actual === 'open'
+                <div className={`mt-1 inline-flex items-center px-3 py-1 rounded-full border text-sm font-medium transition-all duration-300 ${
+                  previewState === 'open'
                     ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800'
                     : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800'
                 }`}>
-                  {actual === 'open' ? (
+                  {previewState === 'open' ? (
                     <>
                       <FiCheck className="mr-1 h-4 w-4" /> Ouvert
                     </>
@@ -156,7 +230,11 @@ const MotorControl: React.FC = () => {
                 <button
                   onClick={async () => {
                     setFenetresError(null);
-                    try { await setActionneursFenetre('FERME', currentUser?.email || 'system'); }
+                    try {
+                      await setMotorStatus('closed', currentUser?.email || 'system');
+                      await setActionneursFenetre('FERME', currentUser?.email || 'system');
+                      await setWindowControlState('closed'); // optimistic UI update for preview
+                    }
                     catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de la fermeture'; setFenetresError(message); }
                   }}
                   className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold shadow-sm transition-colors border ${fenetresAct === 'FERME' ? 'bg-rose-600 text-white border-rose-700 hover:bg-rose-700' : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-900/20 dark:text-rose-300 dark:border-rose-800'}`}
@@ -167,7 +245,11 @@ const MotorControl: React.FC = () => {
                 <button
                   onClick={async () => {
                     setFenetresError(null);
-                    try { await setActionneursFenetre('OUVERT', currentUser?.email || 'system'); }
+                    try {
+                      await setMotorStatus('open', currentUser?.email || 'system');
+                      await setActionneursFenetre('OUVERT', currentUser?.email || 'system');
+                      await setWindowControlState('open'); // optimistic UI update for preview
+                    }
                     catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de l\'ouverture'; setFenetresError(message); }
                   }}
                   className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold shadow-sm transition-colors border ${fenetresAct === 'OUVERT' ? 'bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800'}`}
@@ -226,7 +308,11 @@ const MotorControl: React.FC = () => {
                 <button
                   onClick={async () => {
                     setFenetresError(null);
-                    try { await setActionneursFenetre('FERME', currentUser?.email || 'system'); }
+                    try {
+                      await setMotorStatus('closed', currentUser?.email || 'system');
+                      await setActionneursFenetre('FERME', currentUser?.email || 'system');
+                      await setWindowControlState('closed');
+                    }
                     catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de la fermeture'; setFenetresError(message); }
                   }}
                   className={`relative px-3 py-1 font-medium flex items-center gap-1 transition-colors ${fenetresAct === 'FERME' ? 'text-white' : 'text-gray-800 dark:text-gray-200 hover:bg-rose-100 dark:hover:bg-rose-900/30'}`}
@@ -236,7 +322,11 @@ const MotorControl: React.FC = () => {
                 <button
                   onClick={async () => {
                     setFenetresError(null);
-                    try { await setActionneursFenetre('OUVERT', currentUser?.email || 'system'); }
+                    try {
+                      await setMotorStatus('open', currentUser?.email || 'system');
+                      await setActionneursFenetre('OUVERT', currentUser?.email || 'system');
+                      await setWindowControlState('open');
+                    }
                     catch (e: unknown) { const message = e instanceof Error ? e.message : 'Erreur lors de l\'ouverture'; setFenetresError(message); }
                   }}
                   className={`relative px-3 py-1 font-medium flex items-center gap-1 transition-colors ${fenetresAct === 'OUVERT' ? 'text-white' : 'text-gray-800 dark:text-gray-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'}`}

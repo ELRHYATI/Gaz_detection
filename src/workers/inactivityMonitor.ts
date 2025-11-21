@@ -29,6 +29,7 @@ export const startInactivityMonitor = (opts?: InactivityMonitorOptions) => {
 
   const latestRef = ref(database, 'latestReading');
   const sensorsRef = ref(database, 'capteurs');
+  const statusRef = ref(database, 'system/status');
   const overrideRef = ref(database, 'system/manual_override');
 
   const trySetStatus = async (next: 'active' | 'inactive', reason: string) => {
@@ -112,6 +113,15 @@ export const startInactivityMonitor = (opts?: InactivityMonitorOptions) => {
   // Prime lastValidTs from DB on start for persistence after restarts
   (async () => {
     try {
+      // Prime current status from DB to avoid stale UI where DB is 'inactive'
+      try {
+        const statusSnap = await get(statusRef);
+        const v = statusSnap?.val?.();
+        if (v === 'inactive' || v === 'active') {
+          currentStatus = v;
+        }
+      } catch { /* ignore */ }
+
       const latestSnap = await get(latestRef);
       const sensorsSnap = await get(sensorsRef);
       const candidates: number[] = [];
@@ -136,13 +146,20 @@ export const startInactivityMonitor = (opts?: InactivityMonitorOptions) => {
   // Subscriptions
   onValue(latestRef, handleLatest, (err) => console.error('latestReading subscribe error:', err));
   onValue(sensorsRef, handleSensors, (err) => console.error('capteurs subscribe error:', err));
+  // Keep local status in sync with DB updates from other actors
+  onValue(statusRef, (snap) => {
+    const v = snap?.val?.();
+    if (v === 'inactive' || v === 'active') {
+      currentStatus = v;
+    }
+  }, (err) => console.error('system/status subscribe error:', err));
   onValue(overrideRef, handleOverride, (err) => console.error('manual_override subscribe error:', err));
 
   interval = setInterval(checkInactivity, pollIntervalMs);
 
   // Return cleanup to caller
   return () => {
-    off(latestRef); off(sensorsRef); off(overrideRef);
+    off(latestRef); off(sensorsRef); off(statusRef); off(overrideRef);
     if (interval) clearInterval(interval);
   };
 };

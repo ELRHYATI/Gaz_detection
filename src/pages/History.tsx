@@ -30,21 +30,25 @@ const History: React.FC = () => {
       try {
         const data = await getHistoricalReadings(limit);
         const chronological = data.reverse();
-        if (chronological.length > 0) {
-          setReadings(chronological);
-        } else {
-          // Fallback: build a live buffer from realtime stream when DB history is empty
-          setReadings([]);
-          setIsLiveBuffer(true);
-          liveUnsub = subscribeToLatestReading((reading) => {
-            if (!reading) return;
-            setReadings((prev) => {
-              const next = [...prev, reading];
-              // keep within limit, chronological left->right
-              return next.slice(Math.max(0, next.length - limit));
-            });
+        // Seed with historical, then always append live readings
+        setReadings(chronological);
+        setIsLiveBuffer(true);
+        liveUnsub = subscribeToLatestReading((reading) => {
+          if (!reading) return;
+          setReadings((prev) => {
+            const toMillis = (ts: number) => (ts < 1e12 ? ts * 1000 : ts);
+            const lastTs = prev.length ? toMillis(prev[prev.length - 1].timestamp) : 0;
+            const incomingTs = toMillis(reading.timestamp);
+            // If incoming timestamp is invalid or older than last point, use now
+            const ts = Number.isFinite(incomingTs) && incomingTs > lastTs ? incomingTs : Date.now();
+            const normalized: GasReading = { ...reading, timestamp: ts };
+            // Deduplicate by id+timestamp
+            const exists = prev.some(r => r.id === normalized.id && toMillis(r.timestamp) === ts);
+            const base = exists ? prev : [...prev, normalized];
+            // keep within limit, chronological left->right
+            return base.slice(Math.max(0, base.length - limit));
           });
-        }
+        });
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : 'Erreur lors du chargement des historiques';
         setError(message);
